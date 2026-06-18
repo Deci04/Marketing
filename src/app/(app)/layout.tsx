@@ -4,6 +4,7 @@ import { signOut } from "@/lib/auth";
 
 const NAV = [
   { href: "/calendario", label: "🗓️ Calendario" },
+  { href: "/contenuti", label: "📄 Contenuti" },
   { href: "/archivio", label: "🗂️ Archivio" },
   { href: "/kpi", label: "📊 KPI" },
 ];
