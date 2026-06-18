@@ -2,8 +2,21 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { currentContext } from "@/lib/current";
 import { getContent } from "@/lib/content";
-import { deriveStatus } from "@/lib/status";
+import { deriveStatus, type DerivedStatus } from "@/lib/status";
 import { addCommentAction } from "../actions";
+import {
+  ArrowLeft,
+  InstagramLogo,
+  YoutubeLogo,
+  PaperPlaneTilt,
+} from "@phosphor-icons/react/dist/ssr";
+
+const STATUS_STYLE: Record<DerivedStatus, string> = {
+  "Da consegnare": "bg-secondary text-muted-foreground",
+  Consegnato: "bg-butter text-butter-ink",
+  Revisionato: "bg-lavender text-lavender-ink",
+  Pubblicato: "bg-sage text-sage-ink",
+};
 
 export default async function ContentDetailPage({
   params,
@@ -21,68 +34,100 @@ export default async function ContentDetailPage({
     lucaDeliveryAt: content.block?.lucaDeliveryAt ?? null,
     matteoDeliveryAt: content.block?.matteoDeliveryAt ?? null,
   });
+  const isYt = content.channel === "YOUTUBE";
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6">
       <Link
         href="/contenuti"
-        className="text-sm text-neutral-500 hover:text-black"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-ink"
       >
-        ← Contenuti
+        <ArrowLeft size={15} />
+        Contenuti
       </Link>
 
-      <div>
-        <div className="mb-2 flex flex-wrap gap-2 text-xs">
-          <span className="rounded-full bg-pink-100 px-2 py-0.5 font-semibold text-pink-700">
-            {content.channel === "YOUTUBE" ? "YouTube" : "Instagram"}
+      <div className="rounded-3xl border border-border bg-card p-6">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${
+              isYt ? "bg-coral text-coral-ink" : "bg-blush text-blush-ink"
+            }`}
+          >
+            {isYt ? (
+              <YoutubeLogo size={13} weight="fill" />
+            ) : (
+              <InstagramLogo size={13} weight="fill" />
+            )}
+            {isYt ? "YouTube" : "Instagram"}
           </span>
           {content.block && (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
+            <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground">
               {content.block.label}
             </span>
           )}
-          <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700">
+          <span
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLE[status]}`}
+          >
             {status}
           </span>
         </div>
-        <h1 className="text-2xl font-semibold">{content.title}</h1>
+        <h1 className="text-2xl">{content.title}</h1>
         {content.publishAt && (
-          <p className="mt-1 text-sm text-neutral-500">
-            Pubblicazione: {content.publishAt.toLocaleDateString("it-IT")}
+          <p className="mt-1 text-sm text-muted-foreground">
+            Pubblicazione:{" "}
+            {content.publishAt.toLocaleDateString("it-IT", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
           </p>
         )}
         {content.hook && (
-          <p className="mt-3 rounded-md bg-neutral-50 p-3 text-sm">
-            Hook: &ldquo;{content.hook}&rdquo;
+          <p className="mt-4 rounded-2xl bg-secondary/60 p-4 text-sm">
+            <span className="text-muted-foreground">Hook:</span> &ldquo;
+            {content.hook}&rdquo;
           </p>
         )}
       </div>
 
-      <div>
-        <h2 className="mb-3 font-medium">💬 Commenti</h2>
-        <div className="space-y-3">
+      <div className="rounded-3xl border border-border bg-card p-6">
+        <h2 className="text-lg">Commenti</h2>
+        <div className="mt-4 space-y-3">
           {content.comments.length === 0 && (
-            <p className="text-sm text-neutral-500">Ancora nessun commento.</p>
+            <p className="text-sm text-muted-foreground">
+              Ancora nessun commento.
+            </p>
           )}
-          {content.comments.map((cm) => (
-            <div key={cm.id} className="rounded-lg border p-3">
-              <div className="text-xs font-semibold text-neutral-500">
-                {cm.author.name ?? cm.author.email}
+          {content.comments.map((cm) => {
+            const who = cm.author.name ?? cm.author.email;
+            return (
+              <div key={cm.id} className="flex gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-lavender text-xs font-medium text-lavender-ink">
+                  {who.slice(0, 1).toUpperCase()}
+                </div>
+                <div className="rounded-2xl rounded-tl-sm bg-secondary/60 px-3.5 py-2">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {who}
+                  </div>
+                  <div className="text-sm">{cm.body}</div>
+                </div>
               </div>
-              <div className="text-sm">{cm.body}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-        <form action={addCommentAction} className="mt-4 flex gap-2">
+        <form action={addCommentAction} className="mt-5 flex gap-2">
           <input type="hidden" name="contentId" value={content.id} />
           <input
             name="body"
             required
             placeholder="Scrivi un commento…"
-            className="flex-1 rounded-md border px-3 py-2 text-sm"
+            className="flex-1 rounded-full border border-border bg-paper px-4 py-2 text-sm outline-none focus:border-ink/40"
           />
-          <button className="rounded-md bg-black px-3 py-2 text-sm font-medium text-white">
-            Invia
+          <button
+            aria-label="Invia commento"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform active:scale-95"
+          >
+            <PaperPlaneTilt size={16} weight="fill" />
           </button>
         </form>
       </div>

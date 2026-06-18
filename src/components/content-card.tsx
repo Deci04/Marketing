@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { deriveStatus } from "@/lib/status";
+import { deriveStatus, type DerivedStatus } from "@/lib/status";
+import { InstagramLogo, YoutubeLogo } from "@phosphor-icons/react/dist/ssr";
 
 type CardContent = {
   id: string;
@@ -14,11 +15,11 @@ type CardContent = {
   } | null;
 };
 
-const STATUS_STYLE: Record<string, string> = {
-  "Da consegnare": "bg-neutral-100 text-neutral-600",
-  Consegnato: "bg-amber-100 text-amber-700",
-  Revisionato: "bg-violet-100 text-violet-700",
-  Pubblicato: "bg-emerald-100 text-emerald-700",
+const STATUS_STYLE: Record<DerivedStatus, string> = {
+  "Da consegnare": "bg-secondary text-muted-foreground",
+  Consegnato: "bg-butter text-butter-ink",
+  Revisionato: "bg-lavender text-lavender-ink",
+  Pubblicato: "bg-sage text-sage-ink",
 };
 
 export function ContentCard({ content }: { content: CardContent }) {
@@ -27,40 +28,47 @@ export function ContentCard({ content }: { content: CardContent }) {
     lucaDeliveryAt: content.block?.lucaDeliveryAt ?? null,
     matteoDeliveryAt: content.block?.matteoDeliveryAt ?? null,
   });
-  const channelBadge =
-    content.channel === "YOUTUBE"
-      ? "bg-red-100 text-red-700"
-      : "bg-pink-100 text-pink-700";
+  const isYt = content.channel === "YOUTUBE";
+
   return (
     <Link
       href={`/contenuti/${content.id}`}
-      className="block rounded-xl border p-4 transition-shadow hover:shadow-sm"
+      className="group block rounded-2xl border border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-ink/20"
     >
-      <div className="mb-2 flex flex-wrap gap-2">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <span
-          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${channelBadge}`}
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${
+            isYt ? "bg-coral text-coral-ink" : "bg-blush text-blush-ink"
+          }`}
         >
-          {content.channel === "YOUTUBE" ? "YouTube" : "Instagram"}
+          {isYt ? (
+            <YoutubeLogo size={13} weight="fill" />
+          ) : (
+            <InstagramLogo size={13} weight="fill" />
+          )}
+          {isYt ? "YouTube" : "Instagram"}
         </span>
-        {content.block && (
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-            {content.block.label}
-          </span>
-        )}
         <span
-          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[status]}`}
+          className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLE[status]}`}
         >
           {status}
         </span>
       </div>
-      <h3 className="font-medium">{content.title}</h3>
+      <p className="text-[15px] font-medium leading-snug text-ink">
+        {content.title}
+      </p>
       {content.publishAt && (
-        <p className="mt-1 text-sm text-neutral-500">
-          Pubblicazione: {content.publishAt.toLocaleDateString("it-IT")}
+        <p className="mt-2 text-xs text-muted-foreground">
+          {content.publishAt.toLocaleDateString("it-IT", {
+            day: "numeric",
+            month: "short",
+          })}
         </p>
       )}
       {content.hook && (
-        <p className="mt-2 text-sm text-neutral-600">&ldquo;{content.hook}&rdquo;</p>
+        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+          &ldquo;{content.hook}&rdquo;
+        </p>
       )}
     </Link>
   );

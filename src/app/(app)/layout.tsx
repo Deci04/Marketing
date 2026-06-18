@@ -1,13 +1,7 @@
-import Link from "next/link";
 import { currentContext } from "@/lib/current";
 import { signOut } from "@/lib/auth";
-
-const NAV = [
-  { href: "/calendario", label: "🗓️ Calendario" },
-  { href: "/contenuti", label: "📄 Contenuti" },
-  { href: "/archivio", label: "🗂️ Archivio" },
-  { href: "/kpi", label: "📊 KPI" },
-];
+import { SidebarNav } from "@/components/sidebar-nav";
+import { SignOut } from "@phosphor-icons/react/dist/ssr";
 
 export default async function AppLayout({
   children,
@@ -15,42 +9,49 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const ctx = await currentContext();
+  const name = ctx?.user.name ?? ctx?.user.email ?? "—";
+  const initials = name.slice(0, 1).toUpperCase();
+
   return (
-    <div className="flex min-h-screen">
-      <aside className="w-56 shrink-0 border-r p-4">
-        <div className="mb-6 text-sm font-semibold">
-          {ctx?.workspace.name ?? "—"}
-        </div>
-        <nav className="space-y-1">
-          {NAV.map((n) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              className="block rounded-md px-3 py-2 text-sm hover:bg-neutral-100"
-            >
-              {n.label}
-            </Link>
-          ))}
-        </nav>
-      </aside>
-      <div className="flex-1">
-        <header className="flex items-center justify-between border-b px-6 py-3">
-          <span className="text-sm text-neutral-500">
-            {ctx?.user.name ?? ctx?.user.email}
+    <div className="flex min-h-screen gap-0 p-3">
+      <aside className="sticky top-3 flex h-[calc(100vh-1.5rem)] w-60 shrink-0 flex-col gap-7 rounded-3xl bg-sidebar p-5 text-sidebar-foreground">
+        <div className="flex items-center gap-2.5 px-1">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cream font-heading text-lg text-ink">
+            {(ctx?.workspace.name ?? "L").slice(0, 1)}
+          </div>
+          <span className="text-base font-medium">
+            {ctx?.workspace.name ?? "—"}
           </span>
+        </div>
+
+        <SidebarNav />
+
+        <div className="mt-auto flex items-center justify-between border-t border-sidebar-border pt-4">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs">
+              {initials}
+            </div>
+            <span className="truncate text-xs text-sidebar-foreground/70">
+              {name}
+            </span>
+          </div>
           <form
             action={async () => {
               "use server";
               await signOut({ redirectTo: "/login" });
             }}
           >
-            <button className="text-sm text-neutral-500 hover:text-black">
-              Esci
+            <button
+              aria-label="Esci"
+              className="shrink-0 text-sidebar-foreground/60 transition-colors hover:text-sidebar-foreground"
+            >
+              <SignOut size={18} />
             </button>
           </form>
-        </header>
-        <main className="p-6">{children}</main>
-      </div>
+        </div>
+      </aside>
+
+      <main className="min-w-0 flex-1 px-6 py-5">{children}</main>
     </div>
   );
 }
