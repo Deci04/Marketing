@@ -19,6 +19,9 @@ model Workspace {
   plan        String       @default("free")
   createdAt   DateTime     @default(now())
   memberships Membership[]
+  blocks      Block[]
+  contents    Content[]
+  comments    Comment[]
 }
 
 model User {
@@ -30,6 +33,7 @@ model User {
   memberships Membership[]
   accounts    Account[]
   sessions    Session[]
+  comments    Comment[]
 }
 
 model Membership {
@@ -76,4 +80,95 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// --- Content domain (Modulo 2) ---
+
+enum Channel {
+  INSTAGRAM
+  YOUTUBE
+}
+
+enum ContentFormat {
+  REEL
+  CAROUSEL
+  STORY
+  LONG_VIDEO
+}
+
+model Block {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  label            String
+  lucaDeliveryAt   DateTime?
+  matteoDeliveryAt DateTime?
+  createdAt        DateTime  @default(now())
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contents         Content[]
+  comments         Comment[]
+
+  @@index([workspaceId])
+}
+
+model Content {
+  id               String         @id @default(cuid())
+  workspaceId      String
+  blockId          String?
+  title            String
+  channel          Channel        @default(INSTAGRAM)
+  format           ContentFormat?
+  publishAt        DateTime?
+  hook             String?
+  notes            String?
+  materialsUrl     String?
+  // performance (filled after publishing)
+  views            Int?
+  reach            Int?
+  nonFollowerPct   Float?
+  likes            Int?
+  commentsCount    Int?
+  saves            Int?
+  shares           Int?
+  followsGenerated Int?
+  createdAt        DateTime       @default(now())
+  workspace        Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  block            Block?         @relation(fields: [blockId], references: [id], onDelete: SetNull)
+  comments         Comment[]
+  snapshots        MetricSnapshot[]
+
+  @@index([workspaceId])
+  @@index([blockId])
+}
+
+model Comment {
+  id          String    @id @default(cuid())
+  workspaceId String
+  contentId   String?
+  blockId     String?
+  authorId    String
+  body        String
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  content     Content?  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  block       Block?    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([contentId])
+  @@index([blockId])
+}
+
+model MetricSnapshot {
+  id             String   @id @default(cuid())
+  contentId      String
+  takenAt        DateTime @default(now())
+  views          Int?
+  reach          Int?
+  nonFollowerPct Float?
+  likes          Int?
+  saves          Int?
+  shares         Int?
+  content        Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@index([contentId])
 }
