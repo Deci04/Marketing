@@ -33,7 +33,7 @@ export function ContentCard({ content }: { content: CardContent }) {
   return (
     <Link
       href={`/contenuti/${content.id}`}
-      className="group block rounded-2xl border border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-ink/20"
+      className="group block rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(26,24,19,0.04)] transition-all hover:-translate-y-0.5 hover:border-ink/20 hover:shadow-[0_4px_14px_rgba(26,24,19,0.07)]"
     >
       <div className="mb-3 flex items-center justify-between gap-2">
         <span

@@ -2,6 +2,7 @@ import { currentContext } from "@/lib/current";
 import { listContents, listBlocks } from "@/lib/content";
 import { deriveStatus } from "@/lib/status";
 import { ContentCard } from "@/components/content-card";
+import { TextField, SelectField } from "@/components/field";
 import { createContentAction, createBlockAction } from "./actions";
 import {
   Stack,
@@ -10,10 +11,10 @@ import {
   Plus,
 } from "@phosphor-icons/react/dist/ssr";
 
-const inputClass =
-  "w-full rounded-xl border border-border bg-paper px-3 py-2 text-sm outline-none focus:border-ink/40";
+const cardClass =
+  "rounded-2xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(26,24,19,0.04)]";
 const btnClass =
-  "inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98]";
+  "inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98]";
 
 function Stat({
   label,
@@ -100,47 +101,39 @@ export default async function ContenutiPage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
-        <form
-          action={createContentAction}
-          className="space-y-3 rounded-2xl border border-border bg-card p-5"
-        >
+        <form action={createContentAction} className={`space-y-3 ${cardClass}`}>
           <h2 className="text-lg">Nuovo contenuto</h2>
-          <input name="title" required placeholder="Titolo / concept" className={inputClass} />
-          <div className="flex gap-2">
-            <select name="channel" className={inputClass}>
-              <option value="INSTAGRAM">Instagram</option>
-              <option value="YOUTUBE">YouTube</option>
-            </select>
-            <input name="publishAt" type="date" className={inputClass} />
-          </div>
-          <select name="blockId" className={inputClass} defaultValue="">
+          <TextField name="title" required placeholder="Titolo / concept" />
+          <SelectField name="channel" defaultValue="INSTAGRAM">
+            <option value="INSTAGRAM">Instagram</option>
+            <option value="YOUTUBE">YouTube</option>
+          </SelectField>
+          <TextField name="publishAt" type="date" aria-label="Data pubblicazione" />
+          <SelectField name="blockId" defaultValue="">
             <option value="">Nessun blocco (contenuto-evento)</option>
             {blocks.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.label}
               </option>
             ))}
-          </select>
-          <input name="hook" placeholder="Hook / angolo (opz.)" className={inputClass} />
+          </SelectField>
+          <TextField name="hook" placeholder="Hook / angolo (opz.)" />
           <button className={btnClass}>
             <Plus size={16} weight="bold" />
             Crea contenuto
           </button>
         </form>
 
-        <form
-          action={createBlockAction}
-          className="space-y-3 rounded-2xl border border-border bg-card p-5"
-        >
+        <form action={createBlockAction} className={`space-y-3 ${cardClass}`}>
           <h2 className="text-lg">Nuovo blocco</h2>
-          <input name="label" required placeholder='Etichetta (es. "Settimana 34")' className={inputClass} />
+          <TextField name="label" required placeholder='Etichetta (es. "Settimana 34")' />
           <label className="block text-xs text-muted-foreground">
             Consegna Luca
-            <input name="lucaDeliveryAt" type="date" className={`mt-1 ${inputClass}`} />
+            <TextField name="lucaDeliveryAt" type="date" className="mt-1" />
           </label>
           <label className="block text-xs text-muted-foreground">
             Consegna Matteo
-            <input name="matteoDeliveryAt" type="date" className={`mt-1 ${inputClass}`} />
+            <TextField name="matteoDeliveryAt" type="date" className="mt-1" />
           </label>
           <button className={btnClass}>
             <Plus size={16} weight="bold" />

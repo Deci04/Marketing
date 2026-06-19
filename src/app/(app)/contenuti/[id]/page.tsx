@@ -46,7 +46,7 @@ export default async function ContentDetailPage({
         Contenuti
       </Link>
 
-      <div className="rounded-3xl border border-border bg-card p-6">
+      <div className="rounded-3xl border border-border bg-card p-6 shadow-[0_1px_2px_rgba(26,24,19,0.04)]">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${
@@ -90,7 +90,7 @@ export default async function ContentDetailPage({
         )}
       </div>
 
-      <div className="rounded-3xl border border-border bg-card p-6">
+      <div className="rounded-3xl border border-border bg-card p-6 shadow-[0_1px_2px_rgba(26,24,19,0.04)]">
         <h2 className="text-lg">Commenti</h2>
         <div className="mt-4 space-y-3">
           {content.comments.length === 0 && (
@@ -121,7 +121,7 @@ export default async function ContentDetailPage({
             name="body"
             required
             placeholder="Scrivi un commento…"
-            className="flex-1 rounded-full border border-border bg-paper px-4 py-2 text-sm outline-none focus:border-ink/40"
+            className="flex-1 rounded-full border border-border bg-secondary/70 px-4 py-2.5 text-sm outline-none transition focus:border-ink/30 focus:bg-paper"
           />
           <button
             aria-label="Invia commento"

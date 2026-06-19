@@ -27,7 +27,7 @@ export default function LoginPage() {
             type="email"
             required
             placeholder="la-tua@email.it"
-            className="w-full rounded-xl border border-border bg-paper px-3.5 py-2.5 text-sm outline-none focus:border-ink/40"
+            className="w-full rounded-[12px] border border-border bg-secondary/70 px-3.5 py-2.5 text-sm outline-none transition focus:border-ink/30 focus:bg-paper"
           />
           <button className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98]">
             Entra
