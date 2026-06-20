@@ -18,10 +18,13 @@ model Workspace {
   name        String
   plan        String       @default("free")
   createdAt   DateTime     @default(now())
-  memberships Membership[]
-  blocks      Block[]
-  contents    Content[]
-  comments    Comment[]
+  memberships        Membership[]
+  blocks             Block[]
+  contents           Content[]
+  comments           Comment[]
+  measurements       Measurement[]
+  benchmarks         Benchmark[]
+  valueConversations ValueConversation[]
 }
 
 model User {
@@ -157,6 +160,45 @@ model Comment {
   @@index([workspaceId])
   @@index([contentId])
   @@index([blockId])
+}
+
+// --- KPI domain ---
+
+model Measurement {
+  id          String    @id @default(cuid())
+  workspaceId String
+  date        DateTime
+  metric      String
+  value       Float
+  series      String // "Luca" | "Benchmark"
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model Benchmark {
+  id          String    @id @default(cuid())
+  workspaceId String
+  metric      String
+  value       Float
+  rangeLabel  String?
+  source      String?
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model ValueConversation {
+  id          String    @id @default(cuid())
+  workspaceId String
+  date        DateTime
+  who         String
+  what        String
+  channel     String?
+  link        String?
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
 }
 
 model MetricSnapshot {
