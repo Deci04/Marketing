@@ -29,47 +29,51 @@ export function ContentCard({ content }: { content: CardContent }) {
     matteoDeliveryAt: content.block?.matteoDeliveryAt ?? null,
   });
   const isYt = content.channel === "YOUTUBE";
+  const Logo = isYt ? YoutubeLogo : InstagramLogo;
+  const cover = isYt ? "bg-coral" : "bg-blush";
+  const channelInk = isYt ? "text-coral-ink" : "text-blush-ink";
 
   return (
     <Link
       href={`/contenuti/${content.id}`}
-      className="group block rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(26,24,19,0.04)] transition-all hover:-translate-y-0.5 hover:border-ink/20 hover:shadow-[0_4px_14px_rgba(26,24,19,0.07)]"
+      className="group block overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgba(26,24,19,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(26,24,19,0.09)]"
     >
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div className={`relative h-24 overflow-hidden ${cover}`}>
+        <div className="absolute -right-6 -top-7 h-24 w-24 rounded-full bg-white/25" />
+        <div className="absolute right-9 top-9 h-9 w-9 rounded-xl bg-white/20" />
+        <Logo
+          size={44}
+          weight="fill"
+          className={`absolute -bottom-2 left-3 ${channelInk} opacity-25`}
+        />
         <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${
-            isYt ? "bg-coral text-coral-ink" : "bg-blush text-blush-ink"
-          }`}
-        >
-          {isYt ? (
-            <YoutubeLogo size={13} weight="fill" />
-          ) : (
-            <InstagramLogo size={13} weight="fill" />
-          )}
-          {isYt ? "YouTube" : "Instagram"}
-        </span>
-        <span
-          className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLE[status]}`}
+          className={`absolute right-2.5 top-2.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${STATUS_STYLE[status]}`}
         >
           {status}
         </span>
       </div>
-      <p className="text-[15px] font-medium leading-snug text-ink">
-        {content.title}
-      </p>
-      {content.publishAt && (
-        <p className="mt-2 text-xs text-muted-foreground">
-          {content.publishAt.toLocaleDateString("it-IT", {
-            day: "numeric",
-            month: "short",
-          })}
-        </p>
-      )}
-      {content.hook && (
-        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-          &ldquo;{content.hook}&rdquo;
-        </p>
-      )}
+      <div className="p-4">
+        <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${channelInk}`}>
+          <Logo size={12} weight="fill" />
+          {isYt ? "YouTube" : "Instagram"}
+        </span>
+        <div className="mt-1.5 text-[15px] font-semibold leading-snug text-ink">
+          {content.title}
+        </div>
+        {content.publishAt && (
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {content.publishAt.toLocaleDateString("it-IT", {
+              day: "numeric",
+              month: "short",
+            })}
+          </p>
+        )}
+        {content.hook && (
+          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+            &ldquo;{content.hook}&rdquo;
+          </p>
+        )}
+      </div>
     </Link>
   );
 }

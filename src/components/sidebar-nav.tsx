@@ -26,14 +26,17 @@ export function SidebarNav() {
           <Link
             key={href}
             href={href}
-            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
+            title={label}
+            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors ${
               active
                 ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
                 : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
             }`}
           >
-            <Icon size={20} weight={active ? "fill" : "regular"} />
-            {label}
+            <Icon size={20} weight={active ? "fill" : "regular"} className="shrink-0" />
+            <span className="whitespace-nowrap text-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+              {label}
+            </span>
           </Link>
         );
       })}

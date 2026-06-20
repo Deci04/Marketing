@@ -15,6 +15,8 @@ const cardClass =
   "rounded-2xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(26,24,19,0.04)]";
 const btnClass =
   "inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98]";
+const summaryClass =
+  "inline-flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98] [&::-webkit-details-marker]:hidden";
 
 function Stat({
   label,
@@ -28,12 +30,12 @@ function Stat({
   icon: React.ReactNode;
 }) {
   return (
-    <div className={`rounded-2xl p-4 ${tone}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs opacity-80">{label}</span>
-        <span className="opacity-70">{icon}</span>
+    <div className={`flex items-center justify-between rounded-2xl px-4 py-3.5 ${tone}`}>
+      <div>
+        <div className="text-xs opacity-80">{label}</div>
+        <div className="mt-0.5 text-2xl font-medium leading-none">{value}</div>
       </div>
-      <div className="mt-2 text-3xl font-medium">{value}</div>
+      <span className="opacity-70">{icon}</span>
     </div>
   );
 }
@@ -54,42 +56,92 @@ export default async function ContenutiPage() {
       }) === "Pubblicato"
   ).length;
   const pipeline = contents.length - published;
+  const n = contents.length;
+  const subtitle = `${n} ${n === 1 ? "contenuto" : "contenuti"} · ${pipeline} in lavorazione`;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-7">
-      <header>
-        <h1 className="text-3xl">Contenuti</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {contents.length} contenuti &middot; {pipeline} in lavorazione
-        </p>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-3xl">Contenuti</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+        </div>
       </header>
+
+      <details className="group">
+        <summary className={summaryClass}>
+          <Plus size={16} weight="bold" />
+          Nuovo
+        </summary>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <form action={createContentAction} className={`space-y-3 ${cardClass}`}>
+            <h2 className="text-lg">Nuovo contenuto</h2>
+            <TextField name="title" required placeholder="Titolo / concept" />
+            <SelectField name="channel" defaultValue="INSTAGRAM">
+              <option value="INSTAGRAM">Instagram</option>
+              <option value="YOUTUBE">YouTube</option>
+            </SelectField>
+            <TextField name="publishAt" type="date" aria-label="Data pubblicazione" />
+            <SelectField name="blockId" defaultValue="">
+              <option value="">Nessun blocco (contenuto-evento)</option>
+              {blocks.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.label}
+                </option>
+              ))}
+            </SelectField>
+            <TextField name="hook" placeholder="Hook / angolo (opz.)" />
+            <button className={btnClass}>
+              <Plus size={16} weight="bold" />
+              Crea contenuto
+            </button>
+          </form>
+
+          <form action={createBlockAction} className={`space-y-3 ${cardClass}`}>
+            <h2 className="text-lg">Nuovo blocco</h2>
+            <TextField name="label" required placeholder='Etichetta (es. "Settimana 34")' />
+            <label className="block text-xs text-muted-foreground">
+              Consegna Luca
+              <TextField name="lucaDeliveryAt" type="date" className="mt-1" />
+            </label>
+            <label className="block text-xs text-muted-foreground">
+              Consegna Matteo
+              <TextField name="matteoDeliveryAt" type="date" className="mt-1" />
+            </label>
+            <button className={btnClass}>
+              <Plus size={16} weight="bold" />
+              Crea blocco
+            </button>
+          </form>
+        </div>
+      </details>
 
       <div className="grid grid-cols-3 gap-3">
         <Stat
           label="In pipeline"
           value={pipeline}
           tone="bg-lavender text-lavender-ink"
-          icon={<Stack size={18} weight="fill" />}
+          icon={<Stack size={20} weight="fill" />}
         />
         <Stat
           label="Pubblicati"
           value={published}
           tone="bg-butter text-butter-ink"
-          icon={<PaperPlaneTilt size={18} weight="fill" />}
+          icon={<PaperPlaneTilt size={20} weight="fill" />}
         />
         <Stat
           label="Totale"
-          value={contents.length}
+          value={n}
           tone="bg-blush text-blush-ink"
-          icon={<Files size={18} weight="fill" />}
+          icon={<Files size={20} weight="fill" />}
         />
       </div>
 
       <section className="space-y-3">
         <h2 className="text-lg">Tutti i contenuti</h2>
-        {contents.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center text-sm text-muted-foreground">
-            Nessun contenuto ancora. Creane uno qui sotto.
+        {n === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border bg-card/50 p-10 text-center text-sm text-muted-foreground">
+            Nessun contenuto ancora. Premi <span className="font-medium text-ink">Nuovo</span> per crearne uno.
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -98,48 +150,6 @@ export default async function ContenutiPage() {
             ))}
           </div>
         )}
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2">
-        <form action={createContentAction} className={`space-y-3 ${cardClass}`}>
-          <h2 className="text-lg">Nuovo contenuto</h2>
-          <TextField name="title" required placeholder="Titolo / concept" />
-          <SelectField name="channel" defaultValue="INSTAGRAM">
-            <option value="INSTAGRAM">Instagram</option>
-            <option value="YOUTUBE">YouTube</option>
-          </SelectField>
-          <TextField name="publishAt" type="date" aria-label="Data pubblicazione" />
-          <SelectField name="blockId" defaultValue="">
-            <option value="">Nessun blocco (contenuto-evento)</option>
-            {blocks.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.label}
-              </option>
-            ))}
-          </SelectField>
-          <TextField name="hook" placeholder="Hook / angolo (opz.)" />
-          <button className={btnClass}>
-            <Plus size={16} weight="bold" />
-            Crea contenuto
-          </button>
-        </form>
-
-        <form action={createBlockAction} className={`space-y-3 ${cardClass}`}>
-          <h2 className="text-lg">Nuovo blocco</h2>
-          <TextField name="label" required placeholder='Etichetta (es. "Settimana 34")' />
-          <label className="block text-xs text-muted-foreground">
-            Consegna Luca
-            <TextField name="lucaDeliveryAt" type="date" className="mt-1" />
-          </label>
-          <label className="block text-xs text-muted-foreground">
-            Consegna Matteo
-            <TextField name="matteoDeliveryAt" type="date" className="mt-1" />
-          </label>
-          <button className={btnClass}>
-            <Plus size={16} weight="bold" />
-            Crea blocco
-          </button>
-        </form>
       </section>
     </div>
   );
