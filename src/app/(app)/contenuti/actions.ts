@@ -1,8 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { put } from "@vercel/blob";
 import { currentContext } from "@/lib/current";
-import { createBlock, createContent, addComment } from "@/lib/content";
+import {
+  createBlock,
+  createContent,
+  addComment,
+  setContentThumbnail,
+} from "@/lib/content";
 import type { Channel } from "@prisma/client";
 
 export async function createContentAction(formData: FormData) {
@@ -47,4 +53,26 @@ export async function addCommentAction(formData: FormData) {
   if (!body || !contentId) return;
   await addComment(ctx.workspaceId, { authorId: ctx.user.id, body, contentId });
   revalidatePath(`/contenuti/${contentId}`);
+}
+
+export async function setThumbnailAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const contentId = String(formData.get("contentId") ?? "");
+  if (!contentId) return;
+
+  let finalUrl = String(formData.get("thumbnailUrl") ?? "").trim() || null;
+  const file = formData.get("file");
+  if (file instanceof File && file.size > 0) {
+    const blob = await put(`thumbnails/${contentId}-${file.name}`, file, {
+      access: "public",
+      addRandomSuffix: true,
+    });
+    finalUrl = blob.url;
+  }
+  if (!finalUrl) return;
+
+  await setContentThumbnail(ctx.workspaceId, contentId, finalUrl);
+  revalidatePath(`/contenuti/${contentId}`);
+  revalidatePath("/contenuti");
 }

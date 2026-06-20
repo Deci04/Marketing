@@ -8,6 +8,7 @@ type CardContent = {
   channel: "INSTAGRAM" | "YOUTUBE";
   publishAt: Date | null;
   hook: string | null;
+  thumbnailUrl: string | null;
   block: {
     label: string;
     lucaDeliveryAt: Date | null;
@@ -38,14 +39,21 @@ export function ContentCard({ content }: { content: CardContent }) {
       href={`/contenuti/${content.id}`}
       className="group block overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgba(26,24,19,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(26,24,19,0.09)]"
     >
-      <div className={`relative h-24 overflow-hidden ${cover}`}>
-        <div className="absolute -right-6 -top-7 h-24 w-24 rounded-full bg-white/25" />
-        <div className="absolute right-9 top-9 h-9 w-9 rounded-xl bg-white/20" />
-        <Logo
-          size={44}
-          weight="fill"
-          className={`absolute -bottom-2 left-3 ${channelInk} opacity-25`}
-        />
+      <div className={`relative h-28 overflow-hidden ${content.thumbnailUrl ? "bg-secondary" : cover}`}>
+        {content.thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={content.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <>
+            <div className="absolute -right-6 -top-7 h-24 w-24 rounded-full bg-white/25" />
+            <div className="absolute right-9 top-9 h-9 w-9 rounded-xl bg-white/20" />
+            <Logo
+              size={44}
+              weight="fill"
+              className={`absolute -bottom-2 left-3 ${channelInk} opacity-25`}
+            />
+          </>
+        )}
         <span
           className={`absolute right-2.5 top-2.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${STATUS_STYLE[status]}`}
         >

@@ -121,6 +121,7 @@ model Content {
   hook             String?
   notes            String?
   materialsUrl     String?
+  thumbnailUrl     String?
   // performance (filled after publishing)
   views            Int?
   reach            Int?

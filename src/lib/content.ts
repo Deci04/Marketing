@@ -104,3 +104,19 @@ export function engagementRate(c: {
     (c.likes ?? 0) + (c.commentsCount ?? 0) + (c.saves ?? 0) + (c.shares ?? 0);
   return interactions / c.reach;
 }
+
+export async function setContentThumbnail(
+  workspaceId: string,
+  contentId: string,
+  url: string
+) {
+  const c = await db.content.findFirst({
+    where: scopedWhere(workspaceId, { id: contentId }),
+    select: { id: true },
+  });
+  if (!c) return null;
+  return db.content.update({
+    where: { id: contentId },
+    data: { thumbnailUrl: url },
+  });
+}

@@ -3,12 +3,13 @@ import { notFound } from "next/navigation";
 import { currentContext } from "@/lib/current";
 import { getContent } from "@/lib/content";
 import { deriveStatus, type DerivedStatus } from "@/lib/status";
-import { addCommentAction } from "../actions";
+import { addCommentAction, setThumbnailAction } from "../actions";
 import {
   ArrowLeft,
   InstagramLogo,
   YoutubeLogo,
   PaperPlaneTilt,
+  UploadSimple,
 } from "@phosphor-icons/react/dist/ssr";
 
 const STATUS_STYLE: Record<DerivedStatus, string> = {
@@ -87,6 +88,48 @@ export default async function ContentDetailPage({
             <span className="text-muted-foreground">Hook:</span> &ldquo;
             {content.hook}&rdquo;
           </p>
+        )}
+      </div>
+
+      <div className="rounded-3xl border border-border bg-card p-6 shadow-[0_1px_2px_rgba(26,24,19,0.04)]">
+        <h2 className="text-lg">Materiali &amp; anteprima</h2>
+        {content.thumbnailUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={content.thumbnailUrl}
+            alt=""
+            className="mt-4 max-h-56 w-full rounded-2xl border border-border object-cover"
+          />
+        )}
+        <form action={setThumbnailAction} className="mt-4 space-y-3">
+          <input type="hidden" name="contentId" value={content.id} />
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <UploadSimple size={16} />
+            <input
+              type="file"
+              name="file"
+              accept="image/*"
+              className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-full file:border-0 file:bg-ink file:px-3 file:py-1.5 file:text-paper"
+            />
+          </div>
+          <div className="flex gap-2">
+            <input
+              name="thumbnailUrl"
+              placeholder="…o incolla un URL immagine"
+              className="flex-1 rounded-[12px] border border-border bg-secondary/70 px-3.5 py-2.5 text-sm outline-none transition focus:border-ink/30 focus:bg-paper"
+            />
+            <button className="rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98]">
+              Salva
+            </button>
+          </div>
+        </form>
+        {content.materialsUrl && (
+          <a
+            href={content.materialsUrl}
+            className="mt-3 inline-block text-sm text-blush-ink underline"
+          >
+            Apri link materiali ↗
+          </a>
         )}
       </div>
 
