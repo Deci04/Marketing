@@ -92,3 +92,42 @@ export async function getMonthEvents(
 
   return events;
 }
+
+export type CalendarBlock = {
+  id: string;
+  label: string;
+  start: Date;
+  end: Date;
+};
+
+/** Blocks overlapping the month, with their span (earliest → latest of their
+ * deadlines + content publications). Used to draw the multi-day band. */
+export async function getMonthBlocks(
+  workspaceId: string,
+  year: number,
+  month: number
+): Promise<CalendarBlock[]> {
+  const start = new Date(Date.UTC(year, month, 1));
+  const end = new Date(Date.UTC(year, month + 1, 1));
+
+  const blocks = await db.block.findMany({
+    where: scopedWhere(workspaceId),
+    include: { contents: { select: { publishAt: true } } },
+  });
+
+  const result: CalendarBlock[] = [];
+  for (const b of blocks) {
+    const dates = [
+      b.lucaDeliveryAt,
+      b.matteoDeliveryAt,
+      ...b.contents.map((c) => c.publishAt),
+    ].filter((d): d is Date => d != null);
+    if (dates.length === 0) continue;
+    const s = new Date(Math.min(...dates.map((d) => d.getTime())));
+    const e = new Date(Math.max(...dates.map((d) => d.getTime())));
+    if (e >= start && s < end) {
+      result.push({ id: b.id, label: b.label, start: s, end: e });
+    }
+  }
+  return result;
+}

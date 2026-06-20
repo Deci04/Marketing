@@ -1,7 +1,19 @@
 import Link from "next/link";
 import { currentContext } from "@/lib/current";
-import { getMonthEvents, monthMatrix, type CalendarEvent } from "@/lib/calendar";
-import { CaretLeft, CaretRight } from "@phosphor-icons/react/dist/ssr";
+import {
+  getMonthEvents,
+  getMonthBlocks,
+  monthMatrix,
+  type CalendarEvent,
+} from "@/lib/calendar";
+import {
+  CaretLeft,
+  CaretRight,
+  InstagramLogo,
+  YoutubeLogo,
+  ArrowDown,
+  ArrowUp,
+} from "@phosphor-icons/react/dist/ssr";
 
 const MONTHS = [
   "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
@@ -18,12 +30,24 @@ const KIND_STYLE: Record<CalendarEvent["kind"], string> = {
   publication: "bg-sage text-sage-ink",
 };
 
-function Legend({ tone, label }: { tone: string; label: string }) {
+function EventChip({ e }: { e: CalendarEvent }) {
+  const Logo = e.channel === "YOUTUBE" ? YoutubeLogo : InstagramLogo;
+  const short = e.label.replace(/^.*? — /, "");
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={`inline-block h-2.5 w-2.5 rounded-full ${tone}`} />
-      {label}
-    </span>
+    <Link
+      href={e.href}
+      title={e.label}
+      className={`flex items-center gap-1 truncate rounded-md px-1.5 py-1 text-[11px] font-medium ${KIND_STYLE[e.kind]}`}
+    >
+      {e.kind === "publication" ? (
+        <Logo size={11} weight="fill" className="shrink-0" />
+      ) : e.kind === "luca_delivery" ? (
+        <ArrowDown size={11} weight="bold" className="shrink-0" />
+      ) : (
+        <ArrowUp size={11} weight="bold" className="shrink-0" />
+      )}
+      <span className="truncate">{short}</span>
+    </Link>
   );
 }
 
@@ -39,7 +63,10 @@ export default async function CalendarioPage({
   const year = sp.y ? parseInt(sp.y, 10) : now.getUTCFullYear();
   const month = sp.m != null ? parseInt(sp.m, 10) : now.getUTCMonth();
 
-  const events = await getMonthEvents(ctx.workspaceId, year, month);
+  const [events, blocks] = await Promise.all([
+    getMonthEvents(ctx.workspaceId, year, month),
+    getMonthBlocks(ctx.workspaceId, year, month),
+  ]);
   const weeks = monthMatrix(year, month);
 
   const byDay = new Map<string, CalendarEvent[]>();
@@ -55,7 +82,6 @@ export default async function CalendarioPage({
   const todayKey = dayKey(
     new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   );
-
   const navBtn =
     "flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card transition-colors hover:bg-secondary";
 
@@ -69,10 +95,7 @@ export default async function CalendarioPage({
           <Link href={`/calendario?y=${prev.y}&m=${prev.m}`} className={navBtn} aria-label="Mese precedente">
             <CaretLeft size={16} />
           </Link>
-          <Link
-            href="/calendario"
-            className="rounded-full border border-border bg-card px-4 py-2 text-sm transition-colors hover:bg-secondary"
-          >
+          <Link href="/calendario" className="rounded-full border border-border bg-card px-4 py-2 text-sm transition-colors hover:bg-secondary">
             Oggi
           </Link>
           <Link href={`/calendario?y=${next.y}&m=${next.m}`} className={navBtn} aria-label="Mese successivo">
@@ -82,9 +105,10 @@ export default async function CalendarioPage({
       </div>
 
       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-        <Legend tone="bg-blush" label="Consegna Luca" />
-        <Legend tone="bg-lavender" label="Consegna Matteo" />
-        <Legend tone="bg-sage" label="Pubblicazione" />
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-blush" /> Consegna Luca</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-lavender" /> Consegna Matteo</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-sage" /> Pubblicazione</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-3.5 rounded bg-secondary border border-border" /> Blocco</span>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -95,45 +119,75 @@ export default async function CalendarioPage({
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7">
-          {weeks.flat().map((day, idx) => {
-            const inMonth = day.getUTCMonth() === month;
-            const isToday = dayKey(day) === todayKey;
-            const dayEvents = byDay.get(dayKey(day)) ?? [];
-            const lastCol = idx % 7 === 6;
-            const lastRow = idx >= 35;
-            return (
-              <div
-                key={day.toISOString()}
-                className={`min-h-24 border-border p-1.5 ${lastCol ? "" : "border-r"} ${lastRow ? "" : "border-b"} ${inMonth ? "" : "bg-cream/50"}`}
-              >
-                <div
-                  className={`mb-1 inline-flex h-5 min-w-5 items-center justify-center px-1 text-xs ${
-                    isToday
-                      ? "rounded-full bg-primary font-medium text-primary-foreground"
-                      : inMonth
-                        ? "text-ink"
-                        : "text-muted-foreground"
-                  }`}
-                >
-                  {day.getUTCDate()}
-                </div>
-                <div className="space-y-1">
-                  {dayEvents.map((e, i) => (
-                    <Link
-                      key={i}
-                      href={e.href}
-                      title={e.label}
-                      className={`block truncate rounded-md px-1.5 py-0.5 text-[11px] ${KIND_STYLE[e.kind]}`}
+
+        {weeks.map((week, wi) => {
+          const ws = week[0].getTime();
+          const we = week[6].getTime();
+          const segs = blocks
+            .filter((b) => b.end.getTime() >= ws && b.start.getTime() <= we)
+            .map((b) => {
+              const s = b.start.getTime() < ws ? week[0] : b.start;
+              const e = b.end.getTime() > we ? week[6] : b.end;
+              const startCol = week.findIndex((d) => dayKey(d) === dayKey(s));
+              const endCol = week.findIndex((d) => dayKey(d) === dayKey(e));
+              return {
+                id: b.id,
+                label: b.label,
+                startCol: startCol < 0 ? 0 : startCol,
+                endCol: endCol < 0 ? 6 : endCol,
+                startsHere: b.start.getTime() >= ws,
+              };
+            });
+
+          return (
+            <div key={wi} className="border-b border-border last:border-b-0">
+              {segs.length > 0 && (
+                <div className="grid grid-cols-7 gap-1 px-1 pt-1">
+                  {segs.map((seg) => (
+                    <div
+                      key={seg.id}
+                      style={{ gridColumn: `${seg.startCol + 1} / ${seg.endCol + 2}` }}
+                      className="truncate rounded-md border border-border bg-secondary px-2 py-0.5 text-[11px] font-medium text-ink/70"
                     >
-                      {e.label}
-                    </Link>
+                      {seg.startsHere ? `Blocco · ${seg.label}` : `↪ ${seg.label}`}
+                    </div>
                   ))}
                 </div>
+              )}
+              <div className="grid grid-cols-7">
+                {week.map((day, di) => {
+                  const inMonth = day.getUTCMonth() === month;
+                  const isToday = dayKey(day) === todayKey;
+                  const dayEvents = byDay.get(dayKey(day)) ?? [];
+                  const lastCol = di === 6;
+                  return (
+                    <div
+                      key={day.toISOString()}
+                      className={`min-h-24 p-1.5 ${lastCol ? "" : "border-r"} border-border ${inMonth ? "" : "bg-cream/50"}`}
+                    >
+                      <div
+                        className={`mb-1 inline-flex h-5 min-w-5 items-center justify-center px-1 text-xs ${
+                          isToday
+                            ? "rounded-full bg-primary font-medium text-primary-foreground"
+                            : inMonth
+                              ? "text-ink"
+                              : "text-muted-foreground"
+                        }`}
+                      >
+                        {day.getUTCDate()}
+                      </div>
+                      <div className="space-y-1">
+                        {dayEvents.map((e, i) => (
+                          <EventChip key={i} e={e} />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
