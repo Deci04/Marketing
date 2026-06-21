@@ -16,6 +16,7 @@ import {
   deleteItemAction,
   addEventAction,
   createBlockRangeAction,
+  resizeBlockAction,
 } from "@/app/(app)/calendario/actions";
 
 type Ref = "luca" | "matteo" | "publication" | "event";
@@ -75,8 +76,13 @@ export function CalendarBoard({
     const raw = e.dataTransfer.getData("text/plain");
     if (!raw) return;
     try {
-      const { refType, refId } = JSON.parse(raw) as { refType: Ref; refId: string };
-      await moveItemAction(refType, refId, ymd);
+      const data = JSON.parse(raw);
+      if (data.kind === "resize") {
+        await resizeBlockAction(data.id, data.edge as "start" | "end", ymd);
+        toast.success("Blocco aggiornato");
+      } else {
+        await moveItemAction(data.refType as Ref, data.refId, ymd);
+      }
       router.refresh();
     } catch {}
   };
@@ -142,6 +148,7 @@ export function CalendarBoard({
                 startCol: startCol < 0 ? 0 : startCol,
                 endCol: endCol < 0 ? 6 : endCol,
                 startsHere: b.start >= ws,
+                endsHere: b.end <= we,
               };
             });
 
@@ -153,9 +160,35 @@ export function CalendarBoard({
                     <div
                       key={seg.id}
                       style={{ gridColumn: `${seg.startCol + 1} / ${seg.endCol + 2}` }}
-                      className="truncate rounded-md border border-border bg-secondary px-2 py-0.5 text-[11px] font-medium text-ink/70"
+                      className="relative truncate rounded-md border border-border bg-secondary px-3 py-0.5 text-[11px] font-medium text-ink/70"
                     >
+                      {seg.startsHere && (
+                        <span
+                          draggable
+                          onDragStart={(e) => {
+                            e.stopPropagation();
+                            e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "resize", id: seg.id, edge: "start" }));
+                          }}
+                          title="Trascina su un giorno per accorciare/allungare"
+                          className="absolute left-0 top-0 z-10 flex h-full w-3 cursor-ew-resize items-center justify-center rounded-l-md hover:bg-ink/10"
+                        >
+                          <span className="h-2.5 w-0.5 rounded bg-ink/40" />
+                        </span>
+                      )}
                       {seg.startsHere ? `Blocco · ${seg.label}` : `↪ ${seg.label}`}
+                      {seg.endsHere && (
+                        <span
+                          draggable
+                          onDragStart={(e) => {
+                            e.stopPropagation();
+                            e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "resize", id: seg.id, edge: "end" }));
+                          }}
+                          title="Trascina su un giorno per accorciare/allungare"
+                          className="absolute right-0 top-0 z-10 flex h-full w-3 cursor-ew-resize items-center justify-center rounded-r-md hover:bg-ink/10"
+                        >
+                          <span className="h-2.5 w-0.5 rounded bg-ink/40" />
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -7,6 +7,7 @@ import {
   deleteItem,
   addEvent,
   createBlockRange,
+  resizeBlock,
   type BoardItemRef,
 } from "@/lib/calendar";
 
@@ -28,6 +29,18 @@ export async function deleteItemAction(refType: BoardItemRef, refId: string) {
   if (!ctx || !refType || !refId) return;
   await deleteItem(ctx.workspaceId, refType, refId);
   revalidatePath("/calendario");
+}
+
+export async function resizeBlockAction(
+  id: string,
+  edge: "start" | "end",
+  ymd: string
+) {
+  const ctx = await currentContext();
+  if (!ctx || !id || !ymd) return;
+  await resizeBlock(ctx.workspaceId, id, edge, toUtc(ymd));
+  revalidatePath("/calendario");
+  revalidatePath("/contenuti");
 }
 
 export async function addEventAction(formData: FormData) {

@@ -261,17 +261,55 @@ export async function getMonthBlocks(
 
   const result: CalendarBlock[] = [];
   for (const b of blocks) {
-    const dates = [
-      b.lucaDeliveryAt,
-      b.matteoDeliveryAt,
-      ...b.contents.map((c) => c.publishAt),
-    ].filter((d): d is Date => d != null);
-    if (dates.length === 0) continue;
-    const s = new Date(Math.min(...dates.map((d) => d.getTime())));
-    const e = new Date(Math.max(...dates.map((d) => d.getTime())));
+    // Prefer the explicit range; fall back to the span of deadlines + publications.
+    let s: Date | null = b.startDate;
+    let e: Date | null = b.endDate;
+    if (!s || !e) {
+      const dates = [
+        b.lucaDeliveryAt,
+        b.matteoDeliveryAt,
+        ...b.contents.map((c) => c.publishAt),
+      ].filter((d): d is Date => d != null);
+      if (dates.length > 0) {
+        s = s ?? new Date(Math.min(...dates.map((d) => d.getTime())));
+        e = e ?? new Date(Math.max(...dates.map((d) => d.getTime())));
+      }
+    }
+    if (!s || !e) continue;
     if (e >= start && s < end) {
       result.push({ id: b.id, label: b.label, start: s, end: e });
     }
   }
   return result;
+}
+
+/** Resize a block by moving one edge of its range; re-includes contents that
+ * now fall inside the (normalized) range and aren't already in a block. */
+export async function resizeBlock(
+  workspaceId: string,
+  id: string,
+  edge: "start" | "end",
+  date: Date
+) {
+  const b = await db.block.findFirst({
+    where: scopedWhere(workspaceId, { id }),
+    select: { id: true, startDate: true, endDate: true },
+  });
+  if (!b) return null;
+  let startDate = edge === "start" ? date : b.startDate;
+  let endDate = edge === "end" ? date : b.endDate;
+  if (startDate && endDate && startDate > endDate) {
+    [startDate, endDate] = [endDate, startDate];
+  }
+  await db.block.update({ where: { id }, data: { startDate, endDate } });
+  if (startDate && endDate) {
+    await db.content.updateMany({
+      where: scopedWhere(workspaceId, {
+        blockId: null,
+        publishAt: { gte: startDate, lte: endDate },
+      }),
+      data: { blockId: id },
+    });
+  }
+  return true;
 }
