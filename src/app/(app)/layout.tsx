@@ -5,8 +5,10 @@ import { SignOut } from "@phosphor-icons/react/dist/ssr";
 
 export default async function AppLayout({
   children,
+  modal,
 }: {
   children: React.ReactNode;
+  modal?: React.ReactNode;
 }) {
   const ctx = await currentContext();
   const name = ctx?.user.name ?? ctx?.user.email ?? "—";
@@ -51,6 +53,7 @@ export default async function AppLayout({
       </div>
 
       <main className="min-w-0 flex-1 py-2 pl-1">{children}</main>
+      {modal}
     </div>
   );
 }

@@ -105,6 +105,29 @@ export function engagementRate(c: {
   return interactions / c.reach;
 }
 
+export async function updateContent(
+  workspaceId: string,
+  id: string,
+  data: { title?: string; hook?: string | null; publishAt?: Date | null }
+) {
+  const c = await db.content.findFirst({
+    where: scopedWhere(workspaceId, { id }),
+    select: { id: true },
+  });
+  if (!c) return null;
+  return db.content.update({ where: { id }, data });
+}
+
+export async function deleteContent(workspaceId: string, id: string) {
+  const c = await db.content.findFirst({
+    where: scopedWhere(workspaceId, { id }),
+    select: { id: true },
+  });
+  if (!c) return null;
+  await db.comment.deleteMany({ where: { contentId: id } });
+  return db.content.delete({ where: { id } });
+}
+
 export async function setContentThumbnail(
   workspaceId: string,
   contentId: string,
