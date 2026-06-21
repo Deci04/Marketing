@@ -11,6 +11,7 @@ import {
   setContentThumbnail,
   updateContent,
   deleteContent,
+  deleteComment,
 } from "@/lib/content";
 import type { Channel } from "@prisma/client";
 
@@ -84,6 +85,14 @@ export async function deleteContentAction(formData: FormData) {
   await deleteContent(ctx.workspaceId, id);
   revalidatePath("/contenuti");
   redirect("/contenuti");
+}
+
+export async function deleteCommentAction(id: string, contentId: string) {
+  const ctx = await currentContext();
+  if (!ctx || !id) return;
+  await deleteComment(ctx.workspaceId, id);
+  revalidatePath(`/contenuti/${contentId}`);
+  revalidatePath("/contenuti");
 }
 
 export async function setThumbnailAction(formData: FormData) {

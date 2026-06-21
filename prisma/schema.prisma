@@ -25,6 +25,7 @@ model Workspace {
   measurements       Measurement[]
   benchmarks         Benchmark[]
   valueConversations ValueConversation[]
+  calendarEvents     CalendarEvent[]
 }
 
 model User {
@@ -103,14 +104,32 @@ model Block {
   id               String    @id @default(cuid())
   workspaceId      String
   label            String
+  startDate        DateTime?
+  endDate          DateTime?
   lucaDeliveryAt   DateTime?
   matteoDeliveryAt DateTime?
   createdAt        DateTime  @default(now())
   workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   contents         Content[]
   comments         Comment[]
+  events           CalendarEvent[]
 
   @@index([workspaceId])
+}
+
+model CalendarEvent {
+  id          String    @id @default(cuid())
+  workspaceId String
+  blockId     String?
+  date        DateTime
+  title       String
+  responsible String? // "LUCA" | "MATTEO" | null
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  block       Block?    @relation(fields: [blockId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([blockId])
 }
 
 model Content {

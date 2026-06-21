@@ -18,6 +18,7 @@ import {
   setThumbnailAction,
   updateContentAction,
   deleteContentAction,
+  deleteCommentAction,
 } from "@/app/(app)/contenuti/actions";
 
 export type ModalContent = {
@@ -334,12 +335,25 @@ export function ContentModal({
                       <p className="text-sm text-muted-foreground">Ancora nessun commento.</p>
                     )}
                     {comments.map((c) => (
-                      <div key={c.id} className="rounded-2xl border border-border bg-card p-3.5">
-                        <div className="flex items-baseline justify-between">
+                      <div key={c.id} className="group/cm rounded-2xl border border-border bg-card p-3.5">
+                        <div className="flex items-baseline justify-between gap-2">
                           <span className="text-sm font-medium text-ink">{c.author}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(c.createdAt).toLocaleDateString("it-IT", { day: "numeric", month: "short" })}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(c.createdAt).toLocaleDateString("it-IT", { day: "numeric", month: "short" })}
+                            </span>
+                            <button
+                              aria-label="Elimina commento"
+                              onClick={async () => {
+                                await deleteCommentAction(c.id, content.id);
+                                toast.success("Commento eliminato");
+                                router.refresh();
+                              }}
+                              className="text-muted-foreground opacity-0 transition-opacity hover:text-coral-ink group-hover/cm:opacity-100"
+                            >
+                              <Trash size={13} />
+                            </button>
+                          </div>
                         </div>
                         <p className="mt-1 text-sm text-ink/90">{c.body}</p>
                       </div>

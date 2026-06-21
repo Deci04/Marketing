@@ -93,6 +93,150 @@ export async function getMonthEvents(
   return events;
 }
 
+// --- Interactive board: unified draggable items ---
+
+export type BoardItemRef = "luca" | "matteo" | "publication" | "event";
+
+export type BoardItem = {
+  refType: BoardItemRef;
+  refId: string;
+  date: Date;
+  label: string;
+  owner: "Luca" | "Matteo" | null;
+  channel: Channel | null;
+  href: string | null;
+};
+
+/** All draggable items in a month: block delivery deadlines, content
+ * publications, and custom calendar events. */
+export async function getMonthItems(
+  workspaceId: string,
+  year: number,
+  month: number
+): Promise<BoardItem[]> {
+  const start = new Date(Date.UTC(year, month, 1));
+  const end = new Date(Date.UTC(year, month + 1, 1));
+  const items: BoardItem[] = [];
+
+  const blocks = await db.block.findMany({ where: scopedWhere(workspaceId) });
+  for (const b of blocks) {
+    if (b.lucaDeliveryAt && b.lucaDeliveryAt >= start && b.lucaDeliveryAt < end) {
+      items.push({ refType: "luca", refId: b.id, date: b.lucaDeliveryAt, label: `Luca · ${b.label}`, owner: "Luca", channel: null, href: null });
+    }
+    if (b.matteoDeliveryAt && b.matteoDeliveryAt >= start && b.matteoDeliveryAt < end) {
+      items.push({ refType: "matteo", refId: b.id, date: b.matteoDeliveryAt, label: `Matteo · ${b.label}`, owner: "Matteo", channel: null, href: null });
+    }
+  }
+
+  const contents = await db.content.findMany({
+    where: scopedWhere(workspaceId, { publishAt: { gte: start, lt: end } }),
+  });
+  for (const c of contents) {
+    if (c.publishAt) {
+      items.push({ refType: "publication", refId: c.id, date: c.publishAt, label: c.title, owner: "Matteo", channel: c.channel, href: `/contenuti/${c.id}` });
+    }
+  }
+
+  const events = await db.calendarEvent.findMany({
+    where: scopedWhere(workspaceId, { date: { gte: start, lt: end } }),
+  });
+  for (const e of events) {
+    const owner = e.responsible === "LUCA" ? "Luca" : e.responsible === "MATTEO" ? "Matteo" : null;
+    items.push({ refType: "event", refId: e.id, date: e.date, label: e.title, owner, channel: null, href: null });
+  }
+
+  return items;
+}
+
+async function scopedBlock(workspaceId: string, id: string) {
+  return db.block.findFirst({ where: scopedWhere(workspaceId, { id }), select: { id: true } });
+}
+
+export async function moveItem(
+  workspaceId: string,
+  refType: BoardItemRef,
+  refId: string,
+  date: Date
+) {
+  if (refType === "luca" || refType === "matteo") {
+    if (!(await scopedBlock(workspaceId, refId))) return null;
+    return db.block.update({
+      where: { id: refId },
+      data: refType === "luca" ? { lucaDeliveryAt: date } : { matteoDeliveryAt: date },
+    });
+  }
+  if (refType === "publication") {
+    const c = await db.content.findFirst({ where: scopedWhere(workspaceId, { id: refId }), select: { id: true } });
+    if (!c) return null;
+    return db.content.update({ where: { id: refId }, data: { publishAt: date } });
+  }
+  const e = await db.calendarEvent.findFirst({ where: scopedWhere(workspaceId, { id: refId }), select: { id: true } });
+  if (!e) return null;
+  return db.calendarEvent.update({ where: { id: refId }, data: { date } });
+}
+
+export async function deleteItem(
+  workspaceId: string,
+  refType: BoardItemRef,
+  refId: string
+) {
+  if (refType === "luca" || refType === "matteo") {
+    if (!(await scopedBlock(workspaceId, refId))) return null;
+    return db.block.update({
+      where: { id: refId },
+      data: refType === "luca" ? { lucaDeliveryAt: null } : { matteoDeliveryAt: null },
+    });
+  }
+  if (refType === "publication") {
+    const c = await db.content.findFirst({ where: scopedWhere(workspaceId, { id: refId }), select: { id: true } });
+    if (!c) return null;
+    return db.content.update({ where: { id: refId }, data: { publishAt: null } });
+  }
+  const e = await db.calendarEvent.findFirst({ where: scopedWhere(workspaceId, { id: refId }), select: { id: true } });
+  if (!e) return null;
+  return db.calendarEvent.delete({ where: { id: refId } });
+}
+
+export async function addEvent(
+  workspaceId: string,
+  data: { date: Date; title: string; responsible?: string | null }
+) {
+  return db.calendarEvent.create({
+    data: { workspaceId, date: data.date, title: data.title, responsible: data.responsible || null },
+  });
+}
+
+export async function createBlockRange(
+  workspaceId: string,
+  data: {
+    label: string;
+    startDate: Date;
+    endDate: Date;
+    lucaDeliveryAt?: Date | null;
+    matteoDeliveryAt?: Date | null;
+  }
+) {
+  const block = await db.block.create({
+    data: {
+      workspaceId,
+      label: data.label,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      lucaDeliveryAt: data.lucaDeliveryAt ?? data.startDate,
+      matteoDeliveryAt: data.matteoDeliveryAt ?? data.endDate,
+    },
+  });
+  // auto-include contents whose publication falls in the range and aren't already in a block
+  await db.content.updateMany({
+    where: scopedWhere(workspaceId, {
+      blockId: null,
+      publishAt: { gte: data.startDate, lte: data.endDate },
+    }),
+    data: { blockId: block.id },
+  });
+  return block;
+}
+
 export type CalendarBlock = {
   id: string;
   label: string;

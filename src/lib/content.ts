@@ -91,6 +91,15 @@ export async function addComment(
   });
 }
 
+export async function deleteComment(workspaceId: string, id: string) {
+  const c = await db.comment.findFirst({
+    where: scopedWhere(workspaceId, { id }),
+    select: { id: true },
+  });
+  if (!c) return null;
+  return db.comment.delete({ where: { id } });
+}
+
 /** Engagement rate = interactions / reach. Null until reach is known. */
 export function engagementRate(c: {
   reach?: number | null;
