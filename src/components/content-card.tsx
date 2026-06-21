@@ -41,8 +41,16 @@ export function ContentCard({ content }: { content: CardContent }) {
     >
       <div className={`relative h-28 overflow-hidden ${content.thumbnailUrl ? "bg-secondary" : cover}`}>
         {content.thumbnailUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={content.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={content.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+            <div className="absolute -right-5 -top-6 h-20 w-20 rounded-full bg-white/15" />
+            <div
+              className={`absolute bottom-2 left-2 flex h-7 w-7 items-center justify-center rounded-lg bg-paper/90 ${channelInk}`}
+            >
+              <Logo size={15} weight="fill" />
+            </div>
+          </>
         ) : (
           <>
             <div className="absolute -right-6 -top-7 h-24 w-24 rounded-full bg-white/25" />
