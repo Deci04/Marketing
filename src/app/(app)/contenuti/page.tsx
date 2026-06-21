@@ -3,6 +3,7 @@ import { listContents, listBlocks } from "@/lib/content";
 import { deriveStatus } from "@/lib/status";
 import { ContentCard } from "@/components/content-card";
 import { TextField, SelectField } from "@/components/field";
+import { ToastForm } from "@/components/toast-form";
 import { createContentAction, createBlockAction } from "./actions";
 import {
   Stack,
@@ -74,7 +75,12 @@ export default async function ContenutiPage() {
           Nuovo
         </summary>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <form action={createContentAction} className={`space-y-3 ${cardClass}`}>
+          <ToastForm
+            action={createContentAction}
+            success="Contenuto creato"
+            resetOnSuccess
+            className={`space-y-3 ${cardClass}`}
+          >
             <h2 className="text-lg">Nuovo contenuto</h2>
             <TextField name="title" required placeholder="Titolo / concept" />
             <SelectField name="channel" defaultValue="INSTAGRAM">
@@ -95,9 +101,14 @@ export default async function ContenutiPage() {
               <Plus size={16} weight="bold" />
               Crea contenuto
             </button>
-          </form>
+          </ToastForm>
 
-          <form action={createBlockAction} className={`space-y-3 ${cardClass}`}>
+          <ToastForm
+            action={createBlockAction}
+            success="Blocco creato"
+            resetOnSuccess
+            className={`space-y-3 ${cardClass}`}
+          >
             <h2 className="text-lg">Nuovo blocco</h2>
             <TextField name="label" required placeholder='Etichetta (es. "Settimana 34")' />
             <label className="block text-xs text-muted-foreground">
@@ -112,7 +123,7 @@ export default async function ContenutiPage() {
               <Plus size={16} weight="bold" />
               Crea blocco
             </button>
-          </form>
+          </ToastForm>
         </div>
       </details>
 

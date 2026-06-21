@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
+import { toast } from "sonner";
 import {
   X,
   InstagramLogo,
@@ -206,7 +207,14 @@ export function ContentModal({
                       </div>
                     </>
                   ) : (
-                    <form action={updateContentAction} className="space-y-3">
+                    <form
+                      action={async (fd) => {
+                        await updateContentAction(fd);
+                        toast.success("Modifiche salvate");
+                        setEditing(false);
+                      }}
+                      className="space-y-3"
+                    >
                       <input type="hidden" name="id" value={content.id} />
                       <div>
                         <label className="text-xs text-muted-foreground">Titolo</label>
@@ -283,7 +291,13 @@ export function ContentModal({
                       className="max-h-56 w-full rounded-2xl border border-border object-cover"
                     />
                   )}
-                  <form action={setThumbnailAction} className="space-y-3">
+                  <form
+                    action={async (fd) => {
+                      await setThumbnailAction(fd);
+                      toast.success("Anteprima aggiornata");
+                    }}
+                    className="space-y-3"
+                  >
                     <input type="hidden" name="contentId" value={content.id} />
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <UploadSimple size={16} />
@@ -331,7 +345,13 @@ export function ContentModal({
                       </div>
                     ))}
                   </div>
-                  <form action={addCommentAction} className="flex gap-2">
+                  <form
+                    action={async (fd) => {
+                      await addCommentAction(fd);
+                      toast.success("Commento aggiunto");
+                    }}
+                    className="flex gap-2"
+                  >
                     <input type="hidden" name="contentId" value={content.id} />
                     <input
                       name="body"
