@@ -135,3 +135,16 @@ Sobrio e intenzionale (libreria `motion`): **stagger** al caricamento di liste/c
 
 ## 25. Log brainstorm (decisioni)
 Definito via screenshot-driven (giu 2026): Calendario (banda blocco + card evento), Sidebar (collassabile), Card (2 livelli, illustrazioni dove contano + thumbnail), Dashboard (box drag/resize/hide, funnel default), Grafici (interattivi a confronto), Dettaglio (modale GenFM con nav sezioni + commenti separati), titoli card bold scuri, principio layout "riempire bilanciato". Elementi standard derivati dai riferimenti (GenFM per campi/bottoni, Kravio/Spark Pixel per tabelle).
+
+---
+
+## 26. Stato implementazione (21 giu 2026, 2ª ondata) — tutto live
+- **Sidebar a pallini** separati (no barra unica); voce **Home** in cima.
+- **Card** a 2 livelli con cover pastello/illustrazione **oppure thumbnail** (upload Blob o URL); con foto restano **badge canale + overlay geometrico** (non si perde la grafica).
+- **Calendario**: banda blocco + click evento → **drawer laterale**.
+- **Dettaglio = modale ampia in sovrapposizione** (intercepting routes `@modal/(.)contenuti/[id]`) con nav sezioni (Panoramica/Performance/Materiali/Commenti) + **modifica/elimina**. Fallback full-page su hard-nav.
+- **KPI**: North Star (conversazioni di valore), card metrica con **sparkline + delta + vs benchmark**, **grafico interattivo** Luca vs benchmark (Recharts), imbuto. Nuovi modelli `Measurement` / `Benchmark` / `ValueConversation`.
+- **Archivio**: tabella **ordinabile**.
+- **Home/Dashboard**: hero con **illustrazione SVG su misura**, stat cliccabili, prossime uscite.
+- **Toast** (sonner, a tema) su crea contenuto/blocco, commento, modifica, anteprima.
+- **Aperto**: dashboard KPI a **box movibili** (drag/resize/hide, layout salvato per utente) — unica voce grossa rimasta. Upload **file** su Blob attende il collegamento dello store nella dashboard Vercel (l'URL funziona già).
