@@ -17,7 +17,7 @@ export default function LoginPage() {
             "use server";
             await signIn("credentials", {
               email: formData.get("email"),
-              redirectTo: "/calendario",
+              redirectTo: "/home",
             });
           }}
           className="mt-6 space-y-3"

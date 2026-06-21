@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  House,
   CalendarBlank,
   SquaresFour,
   Archive,
@@ -10,6 +11,7 @@ import {
 } from "@phosphor-icons/react";
 
 const NAV = [
+  { href: "/home", label: "Home", Icon: House },
   { href: "/calendario", label: "Calendario", Icon: CalendarBlank },
   { href: "/contenuti", label: "Contenuti", Icon: SquaresFour },
   { href: "/archivio", label: "Archivio", Icon: Archive },
