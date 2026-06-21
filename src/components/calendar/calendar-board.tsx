@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
 import {
   CaretLeft,
@@ -41,6 +42,25 @@ function chipTone(it: ItemDTO) {
   return "bg-butter text-butter-ink";
 }
 
+function cleanTitle(it: ItemDTO) {
+  if (it.refType === "luca" || it.refType === "matteo")
+    return it.label.replace(/^(Luca|Matteo) · /, "");
+  return it.label;
+}
+
+function kindMeta(it: ItemDTO) {
+  switch (it.refType) {
+    case "luca":
+      return { label: "Consegna materiali", tone: "bg-blush text-blush-ink", who: "Luca" as string | null };
+    case "matteo":
+      return { label: "Consegna revisione", tone: "bg-lavender text-lavender-ink", who: "Matteo" as string | null };
+    case "publication":
+      return { label: "Pubblicazione", tone: "bg-sage text-sage-ink", who: "Matteo" as string | null };
+    default:
+      return { label: "Evento", tone: "bg-butter text-butter-ink", who: it.owner };
+  }
+}
+
 export function CalendarBoard({
   monthLabel,
   year,
@@ -62,6 +82,7 @@ export function CalendarBoard({
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [addDay, setAddDay] = useState<string | null>(null);
   const [showBlock, setShowBlock] = useState(false);
+  const [selected, setSelected] = useState<ItemDTO | null>(null);
 
   const byDay = new Map<string, ItemDTO[]>();
   for (const it of items) {
@@ -243,7 +264,7 @@ export function CalendarBoard({
                                   JSON.stringify({ refType: it.refType, refId: it.refId })
                                 )
                               }
-                              onClick={() => it.href && router.push(it.href)}
+                              onClick={() => setSelected(it)}
                               className={`group/chip flex cursor-grab items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium active:cursor-grabbing ${chipTone(it)}`}
                               title={it.label}
                             >
@@ -339,6 +360,96 @@ export function CalendarBoard({
           </form>
         </Dialog>
       )}
+
+      <AnimatePresence>
+        {selected &&
+          (() => {
+            const meta = kindMeta(selected);
+            const Logo = selected.channel === "YOUTUBE" ? YoutubeLogo : InstagramLogo;
+            return (
+              <motion.div
+                key="cal-drawer"
+                className="fixed inset-0 z-40"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <div
+                  className="absolute inset-0 bg-ink/20 backdrop-blur-[1px]"
+                  onClick={() => setSelected(null)}
+                />
+                <motion.aside
+                  className="absolute bottom-3 right-3 top-3 flex w-80 flex-col overflow-y-auto rounded-3xl border border-border bg-paper p-5 shadow-[0_24px_60px_rgba(26,24,19,0.22)]"
+                  initial={{ x: 340 }}
+                  animate={{ x: 0 }}
+                  exit={{ x: 340 }}
+                  transition={{ type: "spring", stiffness: 320, damping: 32 }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${meta.tone}`}>
+                      {selected.channel && <Logo size={12} weight="fill" />}
+                      {meta.label}
+                    </span>
+                    <button
+                      onClick={() => setSelected(null)}
+                      aria-label="Chiudi"
+                      className="rounded-full border border-border bg-paper p-1.5 text-ink/55 hover:bg-secondary hover:text-ink"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+
+                  <h3 className="mt-3 font-heading text-xl text-ink">{cleanTitle(selected)}</h3>
+
+                  <dl className="mt-4 space-y-3 text-sm">
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Data</dt>
+                      <dd className="mt-0.5 capitalize text-ink">
+                        {new Date(selected.ymd + "T00:00:00.000Z").toLocaleDateString("it-IT", {
+                          weekday: "long",
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                        })}
+                      </dd>
+                    </div>
+                    {meta.who && (
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Responsabile</dt>
+                        <dd className="mt-0.5 text-ink">{meta.who}</dd>
+                      </div>
+                    )}
+                  </dl>
+
+                  <div className="mt-auto flex gap-2 pt-5">
+                    {selected.href && (
+                      <button
+                        onClick={() => {
+                          const h = selected.href!;
+                          setSelected(null);
+                          router.push(h);
+                        }}
+                        className="flex-1 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
+                      >
+                        Apri contenuto
+                      </button>
+                    )}
+                    <button
+                      onClick={async () => {
+                        const it = selected;
+                        setSelected(null);
+                        await onDelete(it);
+                      }}
+                      className="rounded-full border border-coral/60 bg-coral/30 px-4 py-2.5 text-sm text-coral-ink hover:bg-coral/50"
+                    >
+                      Elimina
+                    </button>
+                  </div>
+                </motion.aside>
+              </motion.div>
+            );
+          })()}
+      </AnimatePresence>
     </div>
   );
 }
