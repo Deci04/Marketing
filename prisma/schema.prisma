@@ -29,6 +29,8 @@ model Workspace {
   dashboardLayouts   DashboardLayout[]
   audienceSegments   AudienceSegment[]
   contentClasses     ContentClass[]
+  chatThreads        ChatThread[]
+  chatMessages       ChatMessage[]
 }
 
 model User {
@@ -42,6 +44,7 @@ model User {
   sessions    Session[]
   comments    Comment[]
   dashboardLayouts DashboardLayout[]
+  chatMessages ChatMessage[]
 }
 
 model Membership {
@@ -280,5 +283,36 @@ model ContentClass {
   contents    Content[]
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@index([workspaceId])
+}
+
+// --- F3: chatbot agente condiviso ---
+
+model ChatThread {
+  id          String        @id @default(cuid())
+  workspaceId String
+  title       String?
+  createdAt   DateTime      @default(now())
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messages    ChatMessage[]
+
+  @@index([workspaceId])
+}
+
+model ChatMessage {
+  id          String     @id @default(cuid())
+  threadId    String
+  workspaceId String
+  role        String // "user" | "assistant" | "tool"
+  authorId    String? // User che ha scritto (null per l'assistente)
+  content     String
+  toolPayload Json? // tool call / risultato proposti o eseguiti
+  status      String? // "proposed" | "confirmed" | "executed" | "rejected"
+  createdAt   DateTime   @default(now())
+  thread      ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  author      User?      @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([threadId])
   @@index([workspaceId])
 }
