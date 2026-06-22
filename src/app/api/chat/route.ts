@@ -1,21 +1,21 @@
 import {
+  convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
   generateId,
   stepCountIs,
   streamText,
-  type ModelMessage,
   type UIMessage,
 } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { currentContext } from "@/lib/current";
 import {
   getOrCreateWorkspaceThread,
-  loadThreadMessages,
   saveAssistantMessage,
   saveUserMessage,
 } from "@/lib/chat";
 import { readOnlyTools } from "@/lib/chat-tools";
+import { writeTools } from "@/lib/chat-write-tools";
 
 export const maxDuration = 60;
 
@@ -26,16 +26,30 @@ const MODEL_ID = "claude-opus-4-8";
 const SYSTEM_PROMPT = `Sei l'assistente condiviso di un tool di gestione contenuti per il personal brand di Luca.
 Rispondi in italiano, in modo conciso e concreto.
 La chat è CONDIVISA tra più persone del workspace (Matteo e Luca): più utenti possono scriverti.
-Hai strumenti di sola LETTURA per consultare lo stato del workspace (blocchi, contenuti, calendario, KPI, classi): usali quando servono per rispondere con dati reali, invece di inventare.
-NON puoi ancora creare, modificare o eliminare nulla: se ti chiedono un'azione di scrittura, spiega che la funzione di azione non è ancora attiva.`;
 
-/** Pull the plain text out of a UI message's parts. */
+Hai strumenti di sola LETTURA (blocchi, contenuti, calendario, KPI, classi): usali liberamente per rispondere con dati reali invece di inventare.
+
+Hai anche strumenti di SCRITTURA/azione (creare blocchi e contenuti, aggiornare/eliminare contenuti e performance, pianificare eventi di calendario, registrare conversazioni di valore, aggiungere commenti, creare classi e assegnarle). Quando l'utente chiede un'azione:
+- Raccogli i parametri necessari (chiedi se mancano informazioni essenziali).
+- Chiama lo strumento appropriato: l'utente vedrà una richiesta di CONFERMA prima che l'azione venga eseguita. Non serve che chieda tu conferma a parole: pensa allo strumento come a una proposta.
+- Quando un'azione NON viene approvata, NON riprovarla: spiega che è stata annullata e chiedi come procedere.
+- Per modificare/eliminare un contenuto serve il suo id: ricavalo prima con searchContents.`;
+
+/** Extract the latest user text from a UI message's parts (for persistence). */
 function uiMessageText(message: UIMessage): string {
   return message.parts
     .filter((p): p is { type: "text"; text: string } => p.type === "text")
     .map((p) => p.text)
     .join("")
     .trim();
+}
+
+/** Is this UI message a fresh user turn (not an approval-response continuation)? */
+function isPlainUserTurn(message: UIMessage | undefined): boolean {
+  if (!message || message.role !== "user") return false;
+  // Approval responses ride along on the trailing assistant message, so a real
+  // new user turn is one whose parts are just text.
+  return message.parts.every((p) => p.type === "text");
 }
 
 export async function POST(req: Request) {
@@ -45,30 +59,34 @@ export async function POST(req: Request) {
   }
   const { workspaceId, user } = ctx;
 
-  let body: { message?: UIMessage };
+  let body: { messages?: UIMessage[] };
   try {
     body = await req.json();
   } catch {
     return new Response("Bad request", { status: 400 });
   }
-  const incoming = body.message;
-  if (!incoming || incoming.role !== "user") {
-    return new Response("Missing user message", { status: 400 });
-  }
-  const text = uiMessageText(incoming);
-  if (!text) {
-    return new Response("Empty message", { status: 400 });
+  const messages = body.messages;
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    return new Response("Missing messages", { status: 400 });
   }
 
   const thread = await getOrCreateWorkspaceThread(workspaceId);
 
-  // Persist the user's message first (with attribution) so it survives even if
-  // the AI step fails or no key is configured.
-  await saveUserMessage(workspaceId, thread.id, user.id, text);
+  // Persist a brand-new user turn (with attribution) so it survives reloads and
+  // is visible to the other workspace member. Approval-response continuations
+  // (which re-send the same user message) are NOT new turns and are skipped.
+  const last = messages[messages.length - 1];
+  if (isPlainUserTurn(last)) {
+    const text = uiMessageText(last);
+    if (text) {
+      await saveUserMessage(workspaceId, thread.id, user.id, text);
+    }
+  }
 
   // Graceful degradation: with no API key (and no AI Gateway), the chat still
   // persists + shows attributed user messages, and the assistant replies with a
-  // clear "not configured yet" message instead of crashing.
+  // clear "not configured yet" message instead of crashing. No write actions are
+  // proposed until a key is present.
   const hasKey =
     !!process.env.ANTHROPIC_API_KEY ||
     !!process.env.ANTHROPIC_AUTH_TOKEN ||
@@ -76,7 +94,7 @@ export async function POST(req: Request) {
 
   if (!hasKey) {
     const notice =
-      "L'AI non è ancora configurata. Il messaggio è stato salvato e tutti nel workspace lo vedranno. Per attivare le risposte dell'assistente, imposta la variabile d'ambiente ANTHROPIC_API_KEY (o configura l'AI Gateway di Vercel).";
+      "L'AI non è ancora configurata. Il messaggio è stato salvato e tutti nel workspace lo vedranno. Per attivare le risposte e le azioni dell'assistente, imposta la variabile d'ambiente ANTHROPIC_API_KEY (o configura l'AI Gateway di Vercel).";
     await saveAssistantMessage(workspaceId, thread.id, notice);
     const stream = createUIMessageStream({
       execute: ({ writer }) => {
@@ -89,24 +107,20 @@ export async function POST(req: Request) {
     return createUIMessageStreamResponse({ stream });
   }
 
-  // Build the model context from the full shared DB history (so context is
-  // consistent across both users and across reloads), not just client state.
-  const history = await loadThreadMessages(workspaceId, thread.id);
-  const modelMessages: ModelMessage[] = history.map((m) => ({
-    role: m.role === "assistant" ? "assistant" : "user",
-    content:
-      m.role === "assistant"
-        ? m.content
-        : // Attribute the speaker inline so the shared assistant knows who said what.
-          `[${m.author?.name ?? "Utente"}] ${m.content}`,
-  }));
-
   const result = streamText({
     model: anthropic(MODEL_ID),
     system: SYSTEM_PROMPT,
-    messages: modelMessages,
-    tools: readOnlyTools(workspaceId),
-    stopWhen: stepCountIs(6),
+    // The client owns the shared thread state (seeded from the DB on load),
+    // including any in-flight tool-approval parts — so converting the client
+    // messages preserves the approval round-trip across requests.
+    messages: await convertToModelMessages(messages),
+    tools: {
+      ...readOnlyTools(workspaceId),
+      // Write tools require explicit user approval (needsApproval: true) before
+      // their execute() runs. Bound to this workspace + acting user.
+      ...writeTools(workspaceId, user.id),
+    },
+    stopWhen: stepCountIs(8),
     onFinish: async ({ text: finalText }) => {
       const trimmed = (finalText ?? "").trim();
       if (trimmed) {

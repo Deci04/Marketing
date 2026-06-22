@@ -474,6 +474,29 @@ export function buildFunnel(
 
 // --- Backwards-compatible overview (kept for any older callers) ---
 
+/** Create a value conversation (the North Star signal). Workspace-scoped. */
+export async function addValueConversation(
+  workspaceId: string,
+  data: {
+    who: string;
+    what: string;
+    date?: Date | null;
+    channel?: string | null;
+    link?: string | null;
+  }
+) {
+  return db.valueConversation.create({
+    data: {
+      workspaceId,
+      who: data.who,
+      what: data.what,
+      date: data.date ?? new Date(),
+      channel: data.channel ?? null,
+      link: data.link ?? null,
+    },
+  });
+}
+
 export async function getKpiOverview(workspaceId: string) {
   const [erSeries, nfSeries, vc, contents] = await Promise.all([
     getMetricSeries(workspaceId, "engagement_rate"),

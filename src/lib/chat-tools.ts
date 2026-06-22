@@ -13,10 +13,8 @@ import { listClasses } from "@/lib/classes";
  * workspaceId at construction time — the model can never widen the scope.
  *
  * NOTE: write/action tools (create block/content, schedule publication, etc.)
- * are intentionally NOT here yet. They belong to the second half of F3 and must
- * go through a human-in-the-loop confirmation step. Extension point: add them in
- * a separate `chat-write-tools.ts` and merge into the tool set behind a confirm
- * flow.
+ * live in `chat-write-tools.ts`. They go through a human-in-the-loop
+ * confirmation step (`needsApproval: true`); these read tools never need it.
  */
 export function readOnlyTools(workspaceId: string) {
   return {
