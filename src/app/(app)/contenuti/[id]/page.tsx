@@ -2,8 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { currentContext } from "@/lib/current";
 import { getContent } from "@/lib/content";
+import { listClasses } from "@/lib/classes";
+import { FORMAT_CHIP, formatLabel } from "@/lib/format";
+import { classChip } from "@/lib/classes";
 import { deriveStatus, type DerivedStatus } from "@/lib/status";
 import { addCommentAction, setThumbnailAction } from "../actions";
+import { ContentClassForm } from "./class-form";
 import {
   ArrowLeft,
   InstagramLogo,
@@ -27,8 +31,12 @@ export default async function ContentDetailPage({
   const { id } = await params;
   const ctx = await currentContext();
   if (!ctx) return null;
-  const content = await getContent(ctx.workspaceId, id);
+  const [content, allClasses] = await Promise.all([
+    getContent(ctx.workspaceId, id),
+    listClasses(ctx.workspaceId),
+  ]);
   if (!content) notFound();
+  const fmt = formatLabel(content.format);
 
   const status = deriveStatus({
     publishAt: content.publishAt,
@@ -71,6 +79,21 @@ export default async function ContentDetailPage({
           >
             {status}
           </span>
+          {fmt && content.format && (
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-medium ${FORMAT_CHIP[content.format]}`}
+            >
+              {fmt}
+            </span>
+          )}
+          {content.classes.map((cl) => (
+            <span
+              key={cl.id}
+              className={`rounded-full px-2.5 py-1 text-xs font-medium ${classChip(cl.color)}`}
+            >
+              {cl.name}
+            </span>
+          ))}
         </div>
         <h1 className="text-2xl">{content.title}</h1>
         {content.publishAt && (
@@ -88,6 +111,15 @@ export default async function ContentDetailPage({
             <span className="text-muted-foreground">Hook:</span> &ldquo;
             {content.hook}&rdquo;
           </p>
+        )}
+        {allClasses.length > 0 && (
+          <div className="mt-5 border-t border-border pt-4">
+            <ContentClassForm
+              contentId={content.id}
+              allClasses={allClasses}
+              selected={content.classes.map((c) => c.id)}
+            />
+          </div>
         )}
       </div>
 

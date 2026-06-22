@@ -28,6 +28,7 @@ model Workspace {
   calendarEvents     CalendarEvent[]
   dashboardLayouts   DashboardLayout[]
   audienceSegments   AudienceSegment[]
+  contentClasses     ContentClass[]
 }
 
 model User {
@@ -162,6 +163,7 @@ model Content {
   block            Block?         @relation(fields: [blockId], references: [id], onDelete: SetNull)
   comments         Comment[]
   snapshots        MetricSnapshot[]
+  classes          ContentClass[]
 
   @@index([workspaceId])
   @@index([blockId])
@@ -263,6 +265,19 @@ model AudienceSegment {
   dimension   String // "age" | "gender" | "geo" | "followerType" | "activity" | "returning"
   label       String // es. "25-34", "F", "Italia", "non-follower", "lun 18-21"
   value       Float // percentuale o valore
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+// --- F2: classi nominabili per raggruppare i contenuti ---
+
+model ContentClass {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  color       String? // pastello, opzionale
+  contents    Content[]
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { currentContext } from "@/lib/current";
 import { getContent, engagementRate } from "@/lib/content";
+import { listClasses } from "@/lib/classes";
 import { deriveStatus } from "@/lib/status";
 import {
   ContentModal,
@@ -16,7 +17,10 @@ export default async function ContentModalPage({
   const { id } = await params;
   const ctx = await currentContext();
   if (!ctx) return null;
-  const c = await getContent(ctx.workspaceId, id);
+  const [c, allClasses] = await Promise.all([
+    getContent(ctx.workspaceId, id),
+    listClasses(ctx.workspaceId),
+  ]);
   if (!c) notFound();
 
   const er = engagementRate(c);
@@ -24,6 +28,8 @@ export default async function ContentModalPage({
     id: c.id,
     title: c.title,
     channel: c.channel as "INSTAGRAM" | "YOUTUBE",
+    format: c.format ?? null,
+    classes: c.classes.map((cl) => ({ id: cl.id, name: cl.name, color: cl.color })),
     status: deriveStatus({
       publishAt: c.publishAt,
       lucaDeliveryAt: c.block?.lucaDeliveryAt ?? null,
@@ -59,5 +65,7 @@ export default async function ContentModalPage({
     createdAt: cm.createdAt.toISOString(),
   }));
 
-  return <ContentModal content={content} comments={comments} />;
+  return (
+    <ContentModal content={content} comments={comments} allClasses={allClasses} />
+  );
 }

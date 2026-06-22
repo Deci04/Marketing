@@ -21,6 +21,12 @@ import {
   deleteCommentAction,
 } from "@/app/(app)/contenuti/actions";
 import { updatePerformanceAction } from "@/app/(app)/kpi/actions";
+import { FORMAT_ORDER, FORMAT_LABELS, FORMAT_CHIP } from "@/lib/format";
+import { classChip } from "@/lib/classes";
+import { ClassSelect, type SelectableClass } from "@/components/class-select";
+import type { ContentFormat } from "@prisma/client";
+
+export type ModalClass = { id: string; name: string; color: string | null };
 
 export type ModalContent = {
   id: string;
@@ -32,6 +38,8 @@ export type ModalContent = {
   publishAtInput: string | null;
   thumbnailUrl: string | null;
   materialsUrl: string | null;
+  format: ContentFormat | null;
+  classes: ModalClass[];
   block: { label: string; lucaDeliveryAt: string | null; matteoDeliveryAt: string | null } | null;
   views: number | null;
   er: number | null;
@@ -99,9 +107,11 @@ function fmtDate(iso: string | null) {
 export function ContentModal({
   content,
   comments,
+  allClasses,
 }: {
   content: ModalContent;
   comments: ModalComment[];
+  allClasses: SelectableClass[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("Panoramica");
@@ -210,8 +220,39 @@ export function ContentModal({
                           <p className="mt-1 text-sm text-ink">{fmtDate(content.publishAt)}</p>
                         </div>
                         <div>
+                          <div className="text-xs text-muted-foreground">Tipologia</div>
+                          <p className="mt-1 text-sm text-ink">
+                            {content.format ? (
+                              <span
+                                className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${FORMAT_CHIP[content.format]}`}
+                              >
+                                {FORMAT_LABELS[content.format]}
+                              </span>
+                            ) : (
+                              "—"
+                            )}
+                          </p>
+                        </div>
+                        <div>
                           <div className="text-xs text-muted-foreground">Blocco</div>
                           <p className="mt-1 text-sm text-ink">{content.block?.label ?? "—"}</p>
+                        </div>
+                        <div>
+                          <div className="text-xs text-muted-foreground">Classi</div>
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {content.classes.length > 0 ? (
+                              content.classes.map((cl) => (
+                                <span
+                                  key={cl.id}
+                                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${classChip(cl.color)}`}
+                                >
+                                  {cl.name}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-sm text-ink">—</span>
+                            )}
+                          </div>
                         </div>
                         {content.block?.lucaDeliveryAt && (
                           <div>
@@ -277,6 +318,27 @@ export function ContentModal({
                           className="mt-1 w-full rounded-[12px] border border-border bg-secondary/70 px-3.5 py-2.5 text-sm outline-none focus:border-ink/30 focus:bg-paper"
                         />
                       </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Tipologia</label>
+                        <select
+                          name="format"
+                          defaultValue={content.format ?? ""}
+                          className="mt-1 w-full rounded-[12px] border border-border bg-secondary/70 px-3.5 py-2.5 text-sm outline-none focus:border-ink/30 focus:bg-paper"
+                        >
+                          <option value="">Nessuna</option>
+                          {FORMAT_ORDER.map((f) => (
+                            <option key={f} value={f}>
+                              {FORMAT_LABELS[f]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {allClasses.length > 0 && (
+                        <ClassSelect
+                          classes={allClasses}
+                          defaultSelected={content.classes.map((c) => c.id)}
+                        />
+                      )}
                       <div className="flex gap-2 pt-1">
                         <button className="rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground">
                           Salva

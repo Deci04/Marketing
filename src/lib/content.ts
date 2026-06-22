@@ -1,11 +1,15 @@
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
+import { filtersToWhere, type ContentFilters } from "@/lib/classes";
 import type { Channel, ContentFormat } from "@prisma/client";
 
-export async function listContents(workspaceId: string) {
+export async function listContents(
+  workspaceId: string,
+  filters: ContentFilters = {}
+) {
   return db.content.findMany({
-    where: scopedWhere(workspaceId),
-    include: { block: true },
+    where: filtersToWhere(workspaceId, filters),
+    include: { block: true, classes: true },
     orderBy: [{ publishAt: "asc" }, { createdAt: "desc" }],
   });
 }
@@ -15,6 +19,7 @@ export async function getContent(workspaceId: string, id: string) {
     where: scopedWhere(workspaceId, { id }),
     include: {
       block: true,
+      classes: { orderBy: { name: "asc" } },
       comments: { include: { author: true }, orderBy: { createdAt: "asc" } },
     },
   });
@@ -55,8 +60,19 @@ export async function createContent(
     blockId?: string | null;
     hook?: string | null;
     notes?: string | null;
+    classIds?: string[];
   }
 ) {
+  // Only assign classes that belong to this workspace.
+  const classIds = data.classIds?.length
+    ? (
+        await db.contentClass.findMany({
+          where: scopedWhere(workspaceId, { id: { in: data.classIds } }),
+          select: { id: true },
+        })
+      ).map((c) => c.id)
+    : [];
+
   return db.content.create({
     data: {
       workspaceId,
@@ -67,6 +83,9 @@ export async function createContent(
       blockId: data.blockId ?? null,
       hook: data.hook ?? null,
       notes: data.notes ?? null,
+      ...(classIds.length
+        ? { classes: { connect: classIds.map((id) => ({ id })) } }
+        : {}),
     },
   });
 }
@@ -121,6 +140,7 @@ export async function updateContent(
     title?: string;
     hook?: string | null;
     publishAt?: Date | null;
+    format?: ContentFormat | null;
     // performance metrics (filled after publishing)
     views?: number | null;
     reach?: number | null;

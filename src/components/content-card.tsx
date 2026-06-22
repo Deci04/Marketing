@@ -1,15 +1,19 @@
 import Link from "next/link";
 import { deriveStatus, type DerivedStatus } from "@/lib/status";
+import { FORMAT_CHIP, formatLabel } from "@/lib/format";
+import { classChip } from "@/lib/classes";
 import { InstagramLogo, YoutubeLogo } from "@phosphor-icons/react/dist/ssr";
-import type { Channel } from "@prisma/client";
+import type { Channel, ContentFormat } from "@prisma/client";
 
 type CardContent = {
   id: string;
   title: string;
   channel: Channel;
+  format?: ContentFormat | null;
   publishAt: Date | null;
   hook: string | null;
   thumbnailUrl: string | null;
+  classes?: { id: string; name: string; color: string | null }[];
   block: {
     label: string;
     lucaDeliveryAt: Date | null;
@@ -34,6 +38,8 @@ export function ContentCard({ content }: { content: CardContent }) {
   const Logo = isYt ? YoutubeLogo : InstagramLogo;
   const cover = isYt ? "bg-coral" : "bg-blush";
   const channelInk = isYt ? "text-coral-ink" : "text-blush-ink";
+  const fmt = formatLabel(content.format);
+  const classes = content.classes ?? [];
 
   return (
     <Link
@@ -89,6 +95,25 @@ export function ContentCard({ content }: { content: CardContent }) {
           <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
             &ldquo;{content.hook}&rdquo;
           </p>
+        )}
+        {(fmt || classes.length > 0) && (
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {fmt && content.format && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${FORMAT_CHIP[content.format]}`}
+              >
+                {fmt}
+              </span>
+            )}
+            {classes.map((cl) => (
+              <span
+                key={cl.id}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${classChip(cl.color)}`}
+              >
+                {cl.name}
+              </span>
+            ))}
+          </div>
         )}
       </div>
     </Link>

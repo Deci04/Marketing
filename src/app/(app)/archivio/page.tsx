@@ -14,6 +14,12 @@ export default async function ArchivioPage() {
       id: c.id,
       title: c.title,
       channel: c.channel as "INSTAGRAM" | "YOUTUBE",
+      format: c.format ?? null,
+      classes: c.classes.map((cl) => ({
+        id: cl.id,
+        name: cl.name,
+        color: cl.color,
+      })),
       status: deriveStatus({
         publishAt: c.publishAt,
         lucaDeliveryAt: c.block?.lucaDeliveryAt ?? null,
