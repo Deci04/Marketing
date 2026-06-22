@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { deriveStatus, type DerivedStatus } from "@/lib/status";
 import { InstagramLogo, YoutubeLogo } from "@phosphor-icons/react/dist/ssr";
+import type { Channel } from "@prisma/client";
 
 type CardContent = {
   id: string;
   title: string;
-  channel: "INSTAGRAM" | "YOUTUBE";
+  channel: Channel;
   publishAt: Date | null;
   hook: string | null;
   thumbnailUrl: string | null;

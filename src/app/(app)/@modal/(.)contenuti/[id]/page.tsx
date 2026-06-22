@@ -43,6 +43,13 @@ export default async function ContentModalPage({
       : null,
     views: c.views ?? null,
     er: er != null ? Math.round(er * 1000) / 10 : null,
+    reach: c.reach ?? null,
+    nonFollowerPct: c.nonFollowerPct ?? null,
+    likes: c.likes ?? null,
+    commentsCount: c.commentsCount ?? null,
+    saves: c.saves ?? null,
+    shares: c.shares ?? null,
+    followsGenerated: c.followsGenerated ?? null,
   };
 
   const comments: ModalComment[] = c.comments.map((cm) => ({

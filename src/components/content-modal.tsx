@@ -20,6 +20,7 @@ import {
   deleteContentAction,
   deleteCommentAction,
 } from "@/app/(app)/contenuti/actions";
+import { updatePerformanceAction } from "@/app/(app)/kpi/actions";
 
 export type ModalContent = {
   id: string;
@@ -34,6 +35,13 @@ export type ModalContent = {
   block: { label: string; lucaDeliveryAt: string | null; matteoDeliveryAt: string | null } | null;
   views: number | null;
   er: number | null;
+  reach: number | null;
+  nonFollowerPct: number | null;
+  likes: number | null;
+  commentsCount: number | null;
+  saves: number | null;
+  shares: number | null;
+  followsGenerated: number | null;
 };
 
 export type ModalComment = {
@@ -52,6 +60,32 @@ const STATUS: Record<string, string> = {
 
 const TABS = ["Panoramica", "Performance", "Materiali", "Commenti"] as const;
 type Tab = (typeof TABS)[number];
+
+function PerfField({
+  name,
+  label,
+  value,
+  step = "1",
+}: {
+  name: string;
+  label: string;
+  value: number | null;
+  step?: string;
+}) {
+  return (
+    <div>
+      <label className="text-xs font-medium text-ink">{label}</label>
+      <input
+        type="number"
+        name={name}
+        step={step}
+        defaultValue={value ?? ""}
+        placeholder="—"
+        className="mt-1 w-full rounded-[12px] border border-border bg-secondary/70 px-3.5 py-2.5 text-sm outline-none focus:border-ink/30 focus:bg-paper"
+      />
+    </div>
+  );
+}
 
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
@@ -261,24 +295,49 @@ export function ContentModal({
               )}
 
               {tab === "Performance" && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-4">
                   <div className="rounded-2xl border border-border bg-card p-4">
-                    <div className="text-xs text-muted-foreground">Views</div>
-                    <div className="mt-1 text-2xl font-semibold text-ink">
-                      {content.views != null ? content.views.toLocaleString("it-IT") : "—"}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-border bg-card p-4">
-                    <div className="text-xs text-muted-foreground">Engagement rate</div>
+                    <div className="text-xs text-muted-foreground">Engagement rate (by reach)</div>
                     <div className="mt-1 text-2xl font-semibold text-ink">
                       {content.er != null ? `${content.er}%` : "—"}
                     </div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      calcolato dai dati sotto
+                    </div>
                   </div>
-                  {content.views == null && content.er == null && (
-                    <p className="col-span-2 text-sm text-muted-foreground">
-                      Dati di performance non ancora disponibili per questo contenuto.
-                    </p>
-                  )}
+
+                  <form
+                    action={async (fd) => {
+                      await updatePerformanceAction(fd);
+                      toast.success("Performance salvate");
+                      router.refresh();
+                    }}
+                    className="space-y-3"
+                  >
+                    <input type="hidden" name="id" value={content.id} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <PerfField name="views" label="Views" value={content.views} />
+                      <PerfField name="reach" label="Reach" value={content.reach} />
+                      <PerfField
+                        name="nonFollowerPct"
+                        label="% non-follower"
+                        value={content.nonFollowerPct}
+                        step="any"
+                      />
+                      <PerfField name="likes" label="Like" value={content.likes} />
+                      <PerfField name="commentsCount" label="Commenti" value={content.commentsCount} />
+                      <PerfField name="saves" label="Salvataggi" value={content.saves} />
+                      <PerfField name="shares" label="Condivisioni" value={content.shares} />
+                      <PerfField
+                        name="followsGenerated"
+                        label="Follow generati"
+                        value={content.followsGenerated}
+                      />
+                    </div>
+                    <button className="rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground active:scale-[0.98]">
+                      Salva performance
+                    </button>
+                  </form>
                 </div>
               )}
 

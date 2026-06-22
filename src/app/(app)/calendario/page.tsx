@@ -45,7 +45,7 @@ export default async function CalendarioPage({
     ymd: ymd(it.date),
     label: it.label,
     owner: it.owner,
-    channel: it.channel,
+    channel: it.channel as "INSTAGRAM" | "YOUTUBE" | null,
     href: it.href,
   }));
 

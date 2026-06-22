@@ -13,7 +13,7 @@ export default async function ArchivioPage() {
     return {
       id: c.id,
       title: c.title,
-      channel: c.channel,
+      channel: c.channel as "INSTAGRAM" | "YOUTUBE",
       status: deriveStatus({
         publishAt: c.publishAt,
         lucaDeliveryAt: c.block?.lucaDeliveryAt ?? null,
