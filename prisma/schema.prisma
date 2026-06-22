@@ -26,6 +26,8 @@ model Workspace {
   benchmarks         Benchmark[]
   valueConversations ValueConversation[]
   calendarEvents     CalendarEvent[]
+  dashboardLayouts   DashboardLayout[]
+  audienceSegments   AudienceSegment[]
 }
 
 model User {
@@ -38,6 +40,7 @@ model User {
   accounts    Account[]
   sessions    Session[]
   comments    Comment[]
+  dashboardLayouts DashboardLayout[]
 }
 
 model Membership {
@@ -91,6 +94,7 @@ model VerificationToken {
 enum Channel {
   INSTAGRAM
   YOUTUBE
+  TIKTOK
 }
 
 enum ContentFormat {
@@ -190,6 +194,7 @@ model Measurement {
   metric      String
   value       Float
   series      String // "Luca" | "Benchmark"
+  channel     Channel? // null = Tutti / cross-canale
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
@@ -202,6 +207,7 @@ model Benchmark {
   value       Float
   rangeLabel  String?
   source      String?
+  channel     Channel? // null = Tutti / cross-canale
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
@@ -233,4 +239,31 @@ model MetricSnapshot {
   content        Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
 
   @@index([contentId])
+}
+
+// --- F1: dashboard personalizzabile + box strategici audience ---
+
+model DashboardLayout {
+  id          String    @id @default(cuid())
+  userId      String
+  workspaceId String
+  layout      Json // array react-grid-layout + elenco box nascosti
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+}
+
+model AudienceSegment {
+  id          String    @id @default(cuid())
+  workspaceId String
+  channel     Channel?
+  date        DateTime
+  dimension   String // "age" | "gender" | "geo" | "followerType" | "activity" | "returning"
+  label       String // es. "25-34", "F", "Italia", "non-follower", "lun 18-21"
+  value       Float // percentuale o valore
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
 }
