@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { currentContext } from "@/lib/current";
 import { signOut } from "@/lib/auth";
 import { SidebarNav } from "@/components/sidebar-nav";
+import { ChatPanel } from "@/components/chat/chat-panel";
 import { SignOut } from "@phosphor-icons/react/dist/ssr";
 
 export default async function AppLayout({
@@ -59,6 +60,7 @@ export default async function AppLayout({
 
       <main className="min-w-0 flex-1 py-2 pl-1">{children}</main>
       {modal}
+      <ChatPanel userName={name} />
     </div>
   );
 }

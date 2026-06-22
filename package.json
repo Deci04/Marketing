@@ -11,11 +11,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.85",
+    "@ai-sdk/react": "^3.0.210",
     "@auth/prisma-adapter": "^2.11.2",
     "@base-ui/react": "^1.6.0",
     "@phosphor-icons/react": "^2.1.10",
     "@prisma/client": "^6.19.3",
     "@vercel/blob": "^2.4.1",
+    "ai": "^6.0.208",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.21.0",
