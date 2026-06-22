@@ -117,7 +117,20 @@ export function engagementRate(c: {
 export async function updateContent(
   workspaceId: string,
   id: string,
-  data: { title?: string; hook?: string | null; publishAt?: Date | null }
+  data: {
+    title?: string;
+    hook?: string | null;
+    publishAt?: Date | null;
+    // performance metrics (filled after publishing)
+    views?: number | null;
+    reach?: number | null;
+    nonFollowerPct?: number | null;
+    likes?: number | null;
+    commentsCount?: number | null;
+    saves?: number | null;
+    shares?: number | null;
+    followsGenerated?: number | null;
+  }
 ) {
   const c = await db.content.findFirst({
     where: scopedWhere(workspaceId, { id }),

@@ -1,5 +1,7 @@
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
+import { engagementRate } from "@/lib/content";
+import type { Channel } from "@prisma/client";
 
 export type SeriesPoint = {
   date: string;
@@ -7,12 +9,200 @@ export type SeriesPoint = {
   Benchmark: number | null;
 };
 
+// --- Filters (period + channel) shared by all dashboard boxes ---
+
+export type ChannelFilter = "ALL" | Channel;
+
+export type KpiFilter = {
+  /** inclusive lower bound */
+  from: Date;
+  /** inclusive upper bound */
+  to: Date;
+  channel: ChannelFilter;
+};
+
+/** Period presets used by the dashboard filter bar. */
+export const PERIOD_PRESETS = [7, 30, 90] as const;
+export type PeriodDays = (typeof PERIOD_PRESETS)[number];
+
+/** Build a {from,to} window ending today, going back `days` days. */
+export function periodWindow(days: number, now: Date = new Date()): {
+  from: Date;
+  to: Date;
+} {
+  const to = new Date(now);
+  const from = new Date(now);
+  from.setDate(from.getDate() - days);
+  return { from, to };
+}
+
+/** Resolve filter from URL searchParams (period + channel). */
+export function resolveFilter(
+  searchParams: Record<string, string | string[] | undefined>,
+  now: Date = new Date()
+): KpiFilter & { period: PeriodDays } {
+  const periodRaw = Number(
+    Array.isArray(searchParams.period)
+      ? searchParams.period[0]
+      : searchParams.period
+  );
+  const period: PeriodDays = (PERIOD_PRESETS as readonly number[]).includes(
+    periodRaw
+  )
+    ? (periodRaw as PeriodDays)
+    : 30;
+
+  const channelRaw = Array.isArray(searchParams.channel)
+    ? searchParams.channel[0]
+    : searchParams.channel;
+  const channel: ChannelFilter =
+    channelRaw === "INSTAGRAM" ||
+    channelRaw === "YOUTUBE" ||
+    channelRaw === "TIKTOK"
+      ? (channelRaw as Channel)
+      : "ALL";
+
+  const { from, to } = periodWindow(period, now);
+  return { from, to, channel, period };
+}
+
+// --- Pure formula helpers (unit-tested in tests/kpi.test.ts) ---
+
+/** saves / reach. Null when reach unknown/zero. */
+export function saveRate(saves: number, reach: number | null): number | null {
+  if (!reach || reach <= 0) return null;
+  return saves / reach;
+}
+
+/** shares / reach. Null when reach unknown/zero. */
+export function shareRate(shares: number, reach: number | null): number | null {
+  if (!reach || reach <= 0) return null;
+  return shares / reach;
+}
+
+/** reach / follower. Null when follower count unknown/zero. */
+export function reachRate(
+  reach: number,
+  followers: number | null
+): number | null {
+  if (!followers || followers <= 0) return null;
+  return reach / followers;
+}
+
+/**
+ * Monthly-style follower growth rate over a window:
+ * (end - start) / start. Null when start unknown/zero.
+ */
+export function followerGrowthRate(
+  start: number | null,
+  end: number | null
+): number | null {
+  if (start == null || end == null || start <= 0) return null;
+  return (end - start) / start;
+}
+
+/** value conversations / reach. Null when reach unknown/zero. */
+export function conversionToConversation(
+  conversations: number,
+  reach: number | null
+): number | null {
+  if (!reach || reach <= 0) return null;
+  return conversations / reach;
+}
+
+export type PerfRow = {
+  reach: number | null;
+  likes: number | null;
+  commentsCount: number | null;
+  saves: number | null;
+  shares: number | null;
+  views: number | null;
+  followsGenerated: number | null;
+  nonFollowerPct: number | null;
+};
+
+export type AggregatedPerformance = {
+  count: number;
+  totalReach: number;
+  totalViews: number;
+  totalLikes: number;
+  totalComments: number;
+  totalSaves: number;
+  totalShares: number;
+  totalFollows: number;
+  /** weighted-by-reach average non-follower % (0..100) */
+  avgNonFollowerPct: number | null;
+  /** derived rates (fractions, not %) */
+  engagementRate: number | null;
+  saveRate: number | null;
+  shareRate: number | null;
+};
+
+/**
+ * Aggregate per-content performance into account-level totals + derived rates.
+ * Engagement rate reuses the canonical engagementRate() from content.ts.
+ */
+export function aggregatePerformance(rows: PerfRow[]): AggregatedPerformance {
+  let totalReach = 0,
+    totalViews = 0,
+    totalLikes = 0,
+    totalComments = 0,
+    totalSaves = 0,
+    totalShares = 0,
+    totalFollows = 0;
+  let nfWeighted = 0,
+    nfWeight = 0;
+  let count = 0;
+
+  for (const r of rows) {
+    count++;
+    totalReach += r.reach ?? 0;
+    totalViews += r.views ?? 0;
+    totalLikes += r.likes ?? 0;
+    totalComments += r.commentsCount ?? 0;
+    totalSaves += r.saves ?? 0;
+    totalShares += r.shares ?? 0;
+    totalFollows += r.followsGenerated ?? 0;
+    if (r.nonFollowerPct != null && r.reach != null && r.reach > 0) {
+      nfWeighted += r.nonFollowerPct * r.reach;
+      nfWeight += r.reach;
+    }
+  }
+
+  return {
+    count,
+    totalReach,
+    totalViews,
+    totalLikes,
+    totalComments,
+    totalSaves,
+    totalShares,
+    totalFollows,
+    avgNonFollowerPct: nfWeight > 0 ? nfWeighted / nfWeight : null,
+    engagementRate: engagementRate({
+      reach: totalReach,
+      likes: totalLikes,
+      commentsCount: totalComments,
+      saves: totalSaves,
+      shares: totalShares,
+    }),
+    saveRate: saveRate(totalSaves, totalReach || null),
+    shareRate: shareRate(totalShares, totalReach || null),
+  };
+}
+
+// --- Legacy series helpers (kept; used by the vs-benchmark chart) ---
+
 export async function getMetricSeries(
   workspaceId: string,
-  metric: string
+  metric: string,
+  channel?: ChannelFilter
 ): Promise<SeriesPoint[]> {
   const rows = await db.measurement.findMany({
-    where: scopedWhere(workspaceId, { metric }),
+    where: scopedWhere(workspaceId, {
+      metric,
+      ...(channel && channel !== "ALL" ? { channel } : {}),
+    }),
     orderBy: { date: "asc" },
   });
   const byDate = new Map<string, SeriesPoint>();
@@ -41,6 +231,248 @@ export function summarize(series: SeriesPoint[]): MetricSummary {
     null;
   return { latest, prev, benchmark };
 }
+
+/** Pick first/last value of a date-ordered Measurement series within a window. */
+export function windowEndpoints(
+  rows: { date: Date; value: number }[]
+): { start: number | null; end: number | null } {
+  if (rows.length === 0) return { start: null, end: null };
+  const sorted = [...rows].sort((a, b) => a.date.getTime() - b.date.getTime());
+  return { start: sorted[0].value, end: sorted[sorted.length - 1].value };
+}
+
+// --- Dashboard data assembly (period + channel aware) ---
+
+export type AudienceBucket = { label: string; value: number };
+export type AudienceData = Record<string, AudienceBucket[]>;
+
+export type KpiData = {
+  filter: { period: PeriodDays; channel: ChannelFilter };
+  perf: AggregatedPerformance;
+  followerGrowth: number | null;
+  followerLatest: number | null;
+  conversionToConversation: number | null;
+  reachRate: number | null;
+  publishedCount: number;
+  valueConversations: {
+    id: string;
+    date: string;
+    who: string;
+    what: string;
+    channel: string | null;
+    link: string | null;
+  }[];
+  // chart series (vs benchmark) keyed by metric
+  series: Record<string, SeriesPoint[]>;
+  seriesSummary: Record<string, MetricSummary>;
+  benchmarks: {
+    id: string;
+    metric: string;
+    value: number;
+    rangeLabel: string | null;
+    source: string | null;
+    channel: Channel | null;
+  }[];
+  measurements: {
+    id: string;
+    date: string;
+    metric: string;
+    value: number;
+    series: string;
+    channel: Channel | null;
+  }[];
+  audience: AudienceData;
+  audienceSegments: {
+    id: string;
+    date: string;
+    dimension: string;
+    label: string;
+    value: number;
+    channel: Channel | null;
+  }[];
+  // funnel stages (6)
+  funnel: { label: string; value: number }[];
+};
+
+const CHART_METRICS = ["engagement_rate", "non_follower_pct", "followers"];
+
+export async function getKpiData(
+  workspaceId: string,
+  filter: KpiFilter & { period: PeriodDays }
+): Promise<KpiData> {
+  const channelWhere =
+    filter.channel !== "ALL" ? { channel: filter.channel } : {};
+
+  const [
+    contents,
+    vc,
+    followerRows,
+    benchmarks,
+    measurements,
+    audienceSegments,
+    seriesRows,
+  ] = await Promise.all([
+    db.content.findMany({
+      where: scopedWhere(workspaceId, {
+        ...channelWhere,
+        publishAt: { gte: filter.from, lte: filter.to },
+      }),
+      select: {
+        reach: true,
+        likes: true,
+        commentsCount: true,
+        saves: true,
+        shares: true,
+        views: true,
+        followsGenerated: true,
+        nonFollowerPct: true,
+        publishAt: true,
+      },
+    }),
+    db.valueConversation.findMany({
+      where: scopedWhere(workspaceId, {
+        date: { gte: filter.from, lte: filter.to },
+        ...(filter.channel !== "ALL"
+          ? { channel: channelLabel(filter.channel) }
+          : {}),
+      }),
+      orderBy: { date: "desc" },
+    }),
+    db.measurement.findMany({
+      where: scopedWhere(workspaceId, {
+        metric: "followers",
+        date: { gte: filter.from, lte: filter.to },
+        series: "Luca",
+        ...channelWhere,
+      }),
+      select: { date: true, value: true },
+    }),
+    db.benchmark.findMany({
+      where: scopedWhere(workspaceId, { ...channelWhere }),
+      orderBy: { metric: "asc" },
+    }),
+    db.measurement.findMany({
+      where: scopedWhere(workspaceId),
+      orderBy: { date: "desc" },
+      take: 200,
+    }),
+    db.audienceSegment.findMany({
+      where: scopedWhere(workspaceId, { ...channelWhere }),
+      orderBy: { date: "desc" },
+    }),
+    Promise.all(
+      CHART_METRICS.map((m) => getMetricSeries(workspaceId, m, filter.channel))
+    ),
+  ]);
+
+  const perf = aggregatePerformance(contents);
+  const { start, end } = windowEndpoints(followerRows);
+  const followerGrowth = followerGrowthRate(start, end);
+
+  const series: Record<string, SeriesPoint[]> = {};
+  const seriesSummary: Record<string, MetricSummary> = {};
+  CHART_METRICS.forEach((m, i) => {
+    series[m] = seriesRows[i];
+    seriesSummary[m] = summarize(seriesRows[i]);
+  });
+
+  // audience grouped by dimension, latest value per label
+  const audience: AudienceData = {};
+  const seen = new Set<string>();
+  for (const s of audienceSegments) {
+    const key = `${s.dimension}::${s.label}`;
+    if (seen.has(key)) continue; // first = latest (ordered desc by date)
+    seen.add(key);
+    (audience[s.dimension] ??= []).push({ label: s.label, value: s.value });
+  }
+
+  const reachRateVal = reachRate(perf.totalReach, end);
+
+  const funnel = buildFunnel(perf, vc.length);
+
+  return {
+    filter: { period: filter.period, channel: filter.channel },
+    perf,
+    followerGrowth,
+    followerLatest: end,
+    conversionToConversation: conversionToConversation(
+      vc.length,
+      perf.totalReach || null
+    ),
+    reachRate: reachRateVal,
+    publishedCount: contents.filter((c) => c.publishAt != null).length,
+    valueConversations: vc.map((c) => ({
+      id: c.id,
+      date: c.date.toISOString(),
+      who: c.who,
+      what: c.what,
+      channel: c.channel,
+      link: c.link,
+    })),
+    series,
+    seriesSummary,
+    benchmarks: benchmarks.map((b) => ({
+      id: b.id,
+      metric: b.metric,
+      value: b.value,
+      rangeLabel: b.rangeLabel,
+      source: b.source,
+      channel: b.channel,
+    })),
+    measurements: measurements.map((m) => ({
+      id: m.id,
+      date: m.date.toISOString(),
+      metric: m.metric,
+      value: m.value,
+      series: m.series,
+      channel: m.channel,
+    })),
+    audience,
+    audienceSegments: audienceSegments.map((s) => ({
+      id: s.id,
+      date: s.date.toISOString(),
+      dimension: s.dimension,
+      label: s.label,
+      value: s.value,
+      channel: s.channel,
+    })),
+    funnel,
+  };
+}
+
+/** ValueConversation.channel is a free String; map enum -> readable label. */
+function channelLabel(channel: Channel): string {
+  if (channel === "INSTAGRAM") return "Instagram";
+  if (channel === "YOUTUBE") return "YouTube";
+  return "TikTok";
+}
+
+/**
+ * 6-stage funnel Discovery -> Conversation, derived from aggregated reach.
+ * Each stage uses a real signal where available; intermediate stages fall
+ * back to proportional estimates from the metrics we do have.
+ */
+export function buildFunnel(
+  perf: AggregatedPerformance,
+  conversations: number
+): { label: string; value: number }[] {
+  const discovery = perf.totalViews || perf.totalReach;
+  const reach = perf.totalReach;
+  const interactions =
+    perf.totalLikes + perf.totalComments + perf.totalSaves + perf.totalShares;
+  const saves = perf.totalSaves + perf.totalShares;
+  const follows = perf.totalFollows;
+  return [
+    { label: "Discovery", value: discovery },
+    { label: "Reach", value: reach },
+    { label: "Risonanza", value: interactions },
+    { label: "Interesse", value: saves },
+    { label: "Conversione", value: follows },
+    { label: "Conversazione", value: conversations },
+  ];
+}
+
+// --- Backwards-compatible overview (kept for any older callers) ---
 
 export async function getKpiOverview(workspaceId: string) {
   const [erSeries, nfSeries, vc, contents] = await Promise.all([
