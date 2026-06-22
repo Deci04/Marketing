@@ -24,6 +24,7 @@ import { updatePerformanceAction } from "@/app/(app)/kpi/actions";
 import { FORMAT_ORDER, FORMAT_LABELS, FORMAT_CHIP } from "@/lib/format";
 import { classChip } from "@/lib/classes";
 import { ClassSelect, type SelectableClass } from "@/components/class-select";
+import { VideoReview, type ReviewComment } from "@/components/video-review";
 import type { ContentFormat } from "@prisma/client";
 
 export type ModalClass = { id: string; name: string; color: string | null };
@@ -38,6 +39,8 @@ export type ModalContent = {
   publishAtInput: string | null;
   thumbnailUrl: string | null;
   materialsUrl: string | null;
+  videoProxyUrl: string | null;
+  masterLink: string | null;
   format: ContentFormat | null;
   classes: ModalClass[];
   block: { label: string; lucaDeliveryAt: string | null; matteoDeliveryAt: string | null } | null;
@@ -57,6 +60,7 @@ export type ModalComment = {
   body: string;
   author: string;
   createdAt: string;
+  videoTimestamp: number | null;
 };
 
 const STATUS: Record<string, string> = {
@@ -66,7 +70,7 @@ const STATUS: Record<string, string> = {
   Pubblicato: "bg-sage text-sage-ink",
 };
 
-const TABS = ["Panoramica", "Performance", "Materiali", "Commenti"] as const;
+const TABS = ["Panoramica", "Video", "Performance", "Materiali", "Commenti"] as const;
 type Tab = (typeof TABS)[number];
 
 function PerfField({
@@ -354,6 +358,23 @@ export function ContentModal({
                     </form>
                   )}
                 </div>
+              )}
+
+              {tab === "Video" && (
+                <VideoReview
+                  contentId={content.id}
+                  videoProxyUrl={content.videoProxyUrl}
+                  masterLink={content.masterLink}
+                  comments={comments.map(
+                    (c): ReviewComment => ({
+                      id: c.id,
+                      body: c.body,
+                      author: c.author,
+                      createdAt: c.createdAt,
+                      videoTimestamp: c.videoTimestamp,
+                    })
+                  )}
+                />
               )}
 
               {tab === "Performance" && (

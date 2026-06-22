@@ -97,6 +97,10 @@ export async function addComment(
     body: string;
     contentId?: string | null;
     blockId?: string | null;
+    // F4: review fields — second of the proxy video the comment is anchored to,
+    // and (extension point, second half) a voice note stored on Blob.
+    videoTimestamp?: number | null;
+    audioUrl?: string | null;
   }
 ) {
   return db.comment.create({
@@ -106,6 +110,8 @@ export async function addComment(
       body: data.body,
       contentId: data.contentId ?? null,
       blockId: data.blockId ?? null,
+      videoTimestamp: data.videoTimestamp ?? null,
+      audioUrl: data.audioUrl ?? null,
     },
   });
 }
@@ -183,5 +189,40 @@ export async function setContentThumbnail(
   return db.content.update({
     where: { id: contentId },
     data: { thumbnailUrl: url },
+  });
+}
+
+/** F4: store the URL of the compressed review proxy (lightweight, on Blob).
+ * The heavy master is never uploaded — only this proxy powers the player. */
+export async function setContentVideoProxy(
+  workspaceId: string,
+  contentId: string,
+  url: string | null
+) {
+  const c = await db.content.findFirst({
+    where: scopedWhere(workspaceId, { id: contentId }),
+    select: { id: true },
+  });
+  if (!c) return null;
+  return db.content.update({
+    where: { id: contentId },
+    data: { videoProxyUrl: url },
+  });
+}
+
+/** F4: store/clear the external master link (Drive/iCloud) — path C. */
+export async function setContentMasterLink(
+  workspaceId: string,
+  contentId: string,
+  link: string | null
+) {
+  const c = await db.content.findFirst({
+    where: scopedWhere(workspaceId, { id: contentId }),
+    select: { id: true },
+  });
+  if (!c) return null;
+  return db.content.update({
+    where: { id: contentId },
+    data: { masterLink: link },
   });
 }
