@@ -7,11 +7,16 @@ import {
   YoutubeLogo,
   ArrowsDownUp,
 } from "@phosphor-icons/react";
+import type { ContentFormat } from "@prisma/client";
+import { FORMAT_CHIP, FORMAT_LABELS } from "@/lib/format";
+import { classChip } from "@/lib/classes";
 
 export type ArchiveRow = {
   id: string;
   title: string;
   channel: "INSTAGRAM" | "YOUTUBE";
+  format: ContentFormat | null;
+  classes: { id: string; name: string; color: string | null }[];
   status: string;
   publishAt: string | null;
   views: number | null;
@@ -21,6 +26,8 @@ export type ArchiveRow = {
 const COLS = [
   { key: "title", label: "Contenuto" },
   { key: "channel", label: "Canale" },
+  { key: "format", label: "Tipologia" },
+  { key: "classes", label: "Classi" },
   { key: "status", label: "Stato" },
   { key: "publishAt", label: "Pubblicazione" },
   { key: "views", label: "Views" },
@@ -41,9 +48,18 @@ export function ArchiveTable({ rows }: { rows: ArchiveRow[] }) {
     dir: -1,
   });
 
+  const sortValue = (r: ArchiveRow): string | number | null => {
+    if (sort.key === "format") return r.format ? FORMAT_LABELS[r.format] : null;
+    if (sort.key === "classes")
+      return r.classes.length
+        ? r.classes.map((c) => c.name).join(", ")
+        : null;
+    return r[sort.key];
+  };
+
   const sorted = [...rows].sort((a, b) => {
-    const va = a[sort.key];
-    const vb = b[sort.key];
+    const va = sortValue(a);
+    const vb = sortValue(b);
     if (va == null && vb == null) return 0;
     if (va == null) return 1;
     if (vb == null) return -1;
@@ -90,6 +106,33 @@ export function ArchiveTable({ rows }: { rows: ArchiveRow[] }) {
                   )}
                   {r.channel === "YOUTUBE" ? "YouTube" : "Instagram"}
                 </span>
+              </td>
+              <td className="px-4 py-3">
+                {r.format ? (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${FORMAT_CHIP[r.format]}`}
+                  >
+                    {FORMAT_LABELS[r.format]}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </td>
+              <td className="px-4 py-3">
+                {r.classes.length ? (
+                  <div className="flex flex-wrap gap-1">
+                    {r.classes.map((cl) => (
+                      <span
+                        key={cl.id}
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${classChip(cl.color)}`}
+                      >
+                        {cl.name}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
               </td>
               <td className="px-4 py-3">
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS[r.status] ?? "bg-secondary text-muted-foreground"}`}>

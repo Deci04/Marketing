@@ -13,6 +13,13 @@ import {
   deleteContent,
   deleteComment,
 } from "@/lib/content";
+import {
+  createClass,
+  renameClass,
+  deleteClass,
+  setContentClasses,
+} from "@/lib/classes";
+import { parseFormat } from "@/lib/format";
 import type { Channel } from "@prisma/client";
 
 export async function createContentAction(formData: FormData) {
@@ -21,15 +28,19 @@ export async function createContentAction(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return;
   const channel = String(formData.get("channel") ?? "INSTAGRAM") as Channel;
+  const format = parseFormat(String(formData.get("format") ?? ""));
   const publishRaw = String(formData.get("publishAt") ?? "");
   const blockId = String(formData.get("blockId") ?? "") || null;
   const hook = String(formData.get("hook") ?? "") || null;
+  const classIds = formData.getAll("classIds").map(String).filter(Boolean);
   await createContent(ctx.workspaceId, {
     title,
     channel,
+    format,
     publishAt: publishRaw ? new Date(publishRaw) : null,
     blockId,
     hook,
+    classIds,
   });
   revalidatePath("/contenuti");
 }
@@ -68,13 +79,68 @@ export async function updateContentAction(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
   const hook = String(formData.get("hook") ?? "").trim();
   const publishRaw = String(formData.get("publishAt") ?? "").trim();
+  const format = parseFormat(String(formData.get("format") ?? ""));
   await updateContent(ctx.workspaceId, id, {
     ...(title ? { title } : {}),
     hook: hook || null,
     publishAt: publishRaw ? new Date(publishRaw) : null,
+    format,
   });
+  // Update class assignments only when the field is present in the form.
+  if (formData.has("classIds")) {
+    const classIds = formData.getAll("classIds").map(String).filter(Boolean);
+    await setContentClasses(ctx.workspaceId, id, classIds);
+  }
   revalidatePath("/contenuti");
   revalidatePath(`/contenuti/${id}`);
+}
+
+// --- Content class CRUD + assignment ---
+
+export async function createClassAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return;
+  const color = String(formData.get("color") ?? "") || null;
+  await createClass(ctx.workspaceId, { name, color });
+  revalidatePath("/contenuti");
+}
+
+export async function renameClassAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  const name = String(formData.get("name") ?? "").trim();
+  const color = formData.has("color")
+    ? String(formData.get("color") ?? "") || null
+    : undefined;
+  await renameClass(ctx.workspaceId, id, {
+    ...(name ? { name } : {}),
+    ...(color !== undefined ? { color } : {}),
+  });
+  revalidatePath("/contenuti");
+}
+
+export async function deleteClassAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  await deleteClass(ctx.workspaceId, id);
+  revalidatePath("/contenuti");
+}
+
+export async function setContentClassesAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const contentId = String(formData.get("contentId") ?? "");
+  if (!contentId) return;
+  const classIds = formData.getAll("classIds").map(String).filter(Boolean);
+  await setContentClasses(ctx.workspaceId, contentId, classIds);
+  revalidatePath("/contenuti");
+  revalidatePath(`/contenuti/${contentId}`);
 }
 
 export async function deleteContentAction(formData: FormData) {

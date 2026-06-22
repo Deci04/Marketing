@@ -1,7 +1,14 @@
+import { Suspense } from "react";
 import { currentContext } from "@/lib/current";
 import { listContents, listBlocks } from "@/lib/content";
+import { listClasses } from "@/lib/classes";
+import { FORMAT_ORDER, FORMAT_LABELS } from "@/lib/format";
+import { parseFormat } from "@/lib/format";
 import { deriveStatus } from "@/lib/status";
 import { ContentCard } from "@/components/content-card";
+import { ContentFilters } from "@/components/content-filters";
+import { ClassManager } from "@/components/class-manager";
+import { ClassSelect } from "@/components/class-select";
 import { TextField, SelectField } from "@/components/field";
 import { ToastForm } from "@/components/toast-form";
 import { createContentAction, createBlockAction } from "./actions";
@@ -10,6 +17,7 @@ import {
   PaperPlaneTilt,
   Files,
   Plus,
+  Tag,
 } from "@phosphor-icons/react/dist/ssr";
 
 const cardClass =
@@ -41,12 +49,30 @@ function Stat({
   );
 }
 
-export default async function ContenutiPage() {
+function toArray(v: string | string[] | undefined): string[] {
+  if (v == null) return [];
+  return Array.isArray(v) ? v : [v];
+}
+
+export default async function ContenutiPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const ctx = await currentContext();
   if (!ctx) return null;
-  const [contents, blocks] = await Promise.all([
-    listContents(ctx.workspaceId),
+
+  const sp = await searchParams;
+  const formats = toArray(sp.format)
+    .map((f) => parseFormat(f))
+    .filter((f): f is NonNullable<typeof f> => f != null);
+  const classIds = toArray(sp.class);
+  const hasFilters = formats.length > 0 || classIds.length > 0;
+
+  const [contents, blocks, classes] = await Promise.all([
+    listContents(ctx.workspaceId, { formats, classIds }),
     listBlocks(ctx.workspaceId),
+    listClasses(ctx.workspaceId),
   ]);
   const published = contents.filter(
     (c) =>
@@ -87,6 +113,14 @@ export default async function ContenutiPage() {
               <option value="INSTAGRAM">Instagram</option>
               <option value="YOUTUBE">YouTube</option>
             </SelectField>
+            <SelectField name="format" defaultValue="" aria-label="Tipologia">
+              <option value="">Tipologia (opz.)</option>
+              {FORMAT_ORDER.map((f) => (
+                <option key={f} value={f}>
+                  {FORMAT_LABELS[f]}
+                </option>
+              ))}
+            </SelectField>
             <TextField name="publishAt" type="date" aria-label="Data pubblicazione" />
             <SelectField name="blockId" defaultValue="">
               <option value="">Nessun blocco (contenuto-evento)</option>
@@ -97,6 +131,7 @@ export default async function ContenutiPage() {
               ))}
             </SelectField>
             <TextField name="hook" placeholder="Hook / angolo (opz.)" />
+            <ClassSelect classes={classes} />
             <button className={btnClass}>
               <Plus size={16} weight="bold" />
               Crea contenuto
@@ -127,6 +162,20 @@ export default async function ContenutiPage() {
         </div>
       </details>
 
+      <details className="group">
+        <summary className={`${summaryClass} bg-secondary text-ink`}>
+          <Tag size={16} weight="bold" />
+          Classi
+          {classes.length > 0 && (
+            <span className="opacity-70">({classes.length})</span>
+          )}
+        </summary>
+        <div className={`mt-4 ${cardClass}`}>
+          <h2 className="mb-3 text-lg">Gestione classi</h2>
+          <ClassManager classes={classes} />
+        </div>
+      </details>
+
       <div className="grid grid-cols-3 gap-3">
         <Stat
           label="In pipeline"
@@ -150,9 +199,20 @@ export default async function ContenutiPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg">Tutti i contenuti</h2>
+        <Suspense fallback={null}>
+          <ContentFilters
+            formatOptions={FORMAT_ORDER.map((f) => ({
+              value: f,
+              label: FORMAT_LABELS[f],
+            }))}
+            classOptions={classes.map((c) => ({ value: c.id, label: c.name }))}
+          />
+        </Suspense>
         {n === 0 ? (
           <div className="rounded-2xl border border-dashed border-border bg-card/50 p-10 text-center text-sm text-muted-foreground">
-            Nessun contenuto ancora. Premi <span className="font-medium text-ink">Nuovo</span> per crearne uno.
+            {hasFilters
+              ? "Nessun contenuto corrisponde ai filtri selezionati."
+              : "Nessun contenuto ancora. Premi Nuovo per crearne uno."}
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
