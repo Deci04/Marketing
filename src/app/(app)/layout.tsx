@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { currentContext } from "@/lib/current";
 import { signOut } from "@/lib/auth";
 import { SidebarNav } from "@/components/sidebar-nav";
@@ -11,7 +12,11 @@ export default async function AppLayout({
   modal?: React.ReactNode;
 }) {
   const ctx = await currentContext();
-  const name = ctx?.user.name ?? ctx?.user.email ?? "—";
+  // Stale/undecryptable session cookie (e.g. AUTH_SECRET changed): the proxy
+  // only checks the cookie exists, so send invalid sessions back to login
+  // (re-signing in overwrites the bad cookie) instead of showing an empty shell.
+  if (!ctx) redirect("/login");
+  const name = ctx.user.name ?? ctx.user.email ?? "—";
   const initials = name.slice(0, 1).toUpperCase();
   const wsInitial = (ctx?.workspace.name ?? "L").slice(0, 1);
 
