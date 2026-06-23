@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { upload } from "@vercel/blob/client";
 import { toast } from "sonner";
@@ -27,6 +28,8 @@ import {
   markerPercent,
   timelineComments,
 } from "@/lib/video-review";
+import { AudioRecorder } from "@/components/audio-recorder";
+import { AudioComment } from "@/components/audio-comment";
 
 export type ReviewComment = {
   id: string;
@@ -34,6 +37,7 @@ export type ReviewComment = {
   author: string;
   createdAt: string;
   videoTimestamp: number | null;
+  audioUrl: string | null;
 };
 
 // If the browser can't compress, fall back to uploading the original with a cap.
@@ -57,6 +61,13 @@ export function VideoReview({
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [body, setBody] = useState("");
+
+  // Keep the latest player second in a ref so the audio recorder can read it
+  // at send time without re-rendering on every timeupdate tick.
+  const currentRef = useRef(0);
+  useEffect(() => {
+    currentRef.current = current;
+  }, [current]);
 
   const anchored = timelineComments(comments);
 
@@ -303,7 +314,8 @@ export function VideoReview({
                 <Trash size={13} />
               </button>
             </div>
-            <p className="mt-1 text-sm text-ink/90">{c.body}</p>
+            {c.body && <p className="mt-1 text-sm text-ink/90">{c.body}</p>}
+            {c.audioUrl && <AudioComment src={c.audioUrl} />}
           </div>
         ))}
 
@@ -346,6 +358,21 @@ export function VideoReview({
             <PaperPlaneTilt size={16} weight="fill" />
           </button>
         </form>
+
+        {/* Voice note, anchored to the current second when a proxy is loaded */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            {videoProxyUrl
+              ? `Vocale ancorato a ${formatTimestamp(current)}:`
+              : "Vocale:"}
+          </span>
+          <AudioRecorder
+            contentId={contentId}
+            getTimestamp={
+              videoProxyUrl ? () => currentRef.current : undefined
+            }
+          />
+        </div>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import {
   markerPercent,
   hasProxy,
   timelineComments,
+  audioExtForMime,
 } from "@/lib/video-review";
 
 describe("formatTimestamp", () => {
@@ -74,5 +75,21 @@ describe("timelineComments", () => {
       { id: "b", videoTimestamp: 1 },
     ];
     expect(timelineComments(input).map((c) => c.id)).toEqual(["b"]);
+  });
+});
+
+describe("audioExtForMime", () => {
+  it("maps known mime types to extensions", () => {
+    expect(audioExtForMime("audio/webm")).toBe("webm");
+    expect(audioExtForMime("audio/webm;codecs=opus")).toBe("webm");
+    expect(audioExtForMime("audio/ogg;codecs=opus")).toBe("ogg");
+    expect(audioExtForMime("audio/mp4")).toBe("m4a");
+    expect(audioExtForMime("audio/mpeg")).toBe("mp3");
+  });
+
+  it("falls back to webm for unknown/empty input", () => {
+    expect(audioExtForMime(null)).toBe("webm");
+    expect(audioExtForMime(undefined)).toBe("webm");
+    expect(audioExtForMime("audio/x-weird")).toBe("webm");
   });
 });

@@ -8,6 +8,8 @@ import { classChip } from "@/lib/classes";
 import { deriveStatus, type DerivedStatus } from "@/lib/status";
 import { addCommentAction, setThumbnailAction } from "../actions";
 import { ContentClassForm } from "./class-form";
+import { AudioRecorder } from "@/components/audio-recorder";
+import { AudioComment } from "@/components/audio-comment";
 import {
   ArrowLeft,
   InstagramLogo,
@@ -180,11 +182,12 @@ export default async function ContentDetailPage({
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-lavender text-xs font-medium text-lavender-ink">
                   {who.slice(0, 1).toUpperCase()}
                 </div>
-                <div className="rounded-2xl rounded-tl-sm bg-secondary/60 px-3.5 py-2">
+                <div className="min-w-0 rounded-2xl rounded-tl-sm bg-secondary/60 px-3.5 py-2">
                   <div className="text-xs font-medium text-muted-foreground">
                     {who}
                   </div>
-                  <div className="text-sm">{cm.body}</div>
+                  {cm.body && <div className="text-sm">{cm.body}</div>}
+                  {cm.audioUrl && <AudioComment src={cm.audioUrl} />}
                 </div>
               </div>
             );
@@ -205,6 +208,12 @@ export default async function ContentDetailPage({
             <PaperPlaneTilt size={16} weight="fill" />
           </button>
         </form>
+        <div className="mt-3 flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            …oppure invia un vocale:
+          </span>
+          <AudioRecorder contentId={content.id} />
+        </div>
       </div>
     </div>
   );

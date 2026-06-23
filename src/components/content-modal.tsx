@@ -25,6 +25,8 @@ import { FORMAT_ORDER, FORMAT_LABELS, FORMAT_CHIP } from "@/lib/format";
 import { classChip } from "@/lib/classes";
 import { ClassSelect, type SelectableClass } from "@/components/class-select";
 import { VideoReview, type ReviewComment } from "@/components/video-review";
+import { AudioRecorder } from "@/components/audio-recorder";
+import { AudioComment } from "@/components/audio-comment";
 import type { ContentFormat } from "@prisma/client";
 
 export type ModalClass = { id: string; name: string; color: string | null };
@@ -61,6 +63,7 @@ export type ModalComment = {
   author: string;
   createdAt: string;
   videoTimestamp: number | null;
+  audioUrl: string | null;
 };
 
 const STATUS: Record<string, string> = {
@@ -372,6 +375,7 @@ export function ContentModal({
                       author: c.author,
                       createdAt: c.createdAt,
                       videoTimestamp: c.videoTimestamp,
+                      audioUrl: c.audioUrl,
                     })
                   )}
                 />
@@ -497,12 +501,17 @@ export function ContentModal({
                             </button>
                           </div>
                         </div>
-                        <p className="mt-1 text-sm text-ink/90">{c.body}</p>
+                        {c.body && (
+                          <p className="mt-1 text-sm text-ink/90">{c.body}</p>
+                        )}
+                        {c.audioUrl && <AudioComment src={c.audioUrl} />}
                       </div>
                     ))}
                   </div>
                   <form
                     action={async (fd) => {
+                      const body = String(fd.get("body") ?? "").trim();
+                      if (!body) return;
                       await addCommentAction(fd);
                       toast.success("Commento aggiunto");
                     }}
@@ -521,6 +530,12 @@ export function ContentModal({
                       <PaperPlaneTilt size={16} weight="fill" />
                     </button>
                   </form>
+                  <div className="flex items-center gap-2 border-t border-border pt-3">
+                    <span className="text-xs text-muted-foreground">
+                      …oppure invia un vocale:
+                    </span>
+                    <AudioRecorder contentId={content.id} />
+                  </div>
                 </div>
               )}
             </div>

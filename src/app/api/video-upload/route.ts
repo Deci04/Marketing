@@ -10,6 +10,11 @@ import { currentContext } from "@/lib/current";
  * calls this route to mint a short-lived, scoped client token. Going through
  * the client keeps the (potentially multi-MB) proxy off the Server Action body
  * limit and off our function memory.
+ *
+ * The same route also mints tokens for **audio comments** (voice notes recorded
+ * in the browser with `MediaRecorder`): they are uploaded the same way, so we
+ * allow their content types here too. The blob URL is then persisted as
+ * `Comment.audioUrl` via a Server Action.
  */
 export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
@@ -23,7 +28,16 @@ export async function POST(request: Request): Promise<NextResponse> {
         const ctx = await currentContext();
         if (!ctx) throw new Error("Non autorizzato");
         return {
-          allowedContentTypes: ["video/webm", "video/mp4", "video/quicktime"],
+          allowedContentTypes: [
+            "video/webm",
+            "video/mp4",
+            "video/quicktime",
+            // Audio comments (voice notes) recorded via MediaRecorder.
+            "audio/webm",
+            "audio/ogg",
+            "audio/mp4",
+            "audio/mpeg",
+          ],
           // Proxy is compressed client-side; cap generously to avoid abuse.
           maximumSizeInBytes: 200 * 1024 * 1024,
           addRandomSuffix: true,

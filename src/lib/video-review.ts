@@ -34,6 +34,25 @@ export function hasProxy(content: { videoProxyUrl?: string | null }): boolean {
   return Boolean(content.videoProxyUrl);
 }
 
+/** Map an audio MediaRecorder mimeType (e.g. "audio/webm;codecs=opus") to a
+ * sensible file extension for the uploaded Blob. Falls back to "webm". */
+export function audioExtForMime(mimeType: string | null | undefined): string {
+  if (!mimeType) return "webm";
+  const base = mimeType.split(";")[0].trim().toLowerCase();
+  switch (base) {
+    case "audio/webm":
+      return "webm";
+    case "audio/ogg":
+      return "ogg";
+    case "audio/mp4":
+      return "m4a";
+    case "audio/mpeg":
+      return "mp3";
+    default:
+      return "webm";
+  }
+}
+
 /** Comments that are anchored to a point on the timeline (have a videoTimestamp),
  * sorted by their position. Generic comments (null timestamp) are excluded. */
 export function timelineComments<T extends { videoTimestamp?: number | null }>(

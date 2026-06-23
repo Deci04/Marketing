@@ -66,6 +66,7 @@ export default async function ContentModalPage({
     author: cm.author?.name ?? cm.author?.email ?? "—",
     createdAt: cm.createdAt.toISOString(),
     videoTimestamp: cm.videoTimestamp ?? null,
+    audioUrl: cm.audioUrl ?? null,
   }));
 
   return (
