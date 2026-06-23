@@ -9,6 +9,8 @@ import {
   createContent,
   addComment,
   setContentThumbnail,
+  setContentVideoProxy,
+  setContentMasterLink,
   updateContent,
   deleteContent,
   deleteComment,
@@ -66,7 +68,67 @@ export async function addCommentAction(formData: FormData) {
   const body = String(formData.get("body") ?? "").trim();
   const contentId = String(formData.get("contentId") ?? "") || null;
   if (!body || !contentId) return;
-  await addComment(ctx.workspaceId, { authorId: ctx.user.id, body, contentId });
+  // F4: optionally anchor the comment to the current second of the review proxy.
+  const tsRaw = String(formData.get("videoTimestamp") ?? "").trim();
+  const ts = tsRaw === "" ? null : Number(tsRaw);
+  const videoTimestamp = ts != null && Number.isFinite(ts) && ts >= 0 ? ts : null;
+  await addComment(ctx.workspaceId, {
+    authorId: ctx.user.id,
+    body,
+    contentId,
+    videoTimestamp,
+  });
+  revalidatePath(`/contenuti/${contentId}`);
+  revalidatePath("/contenuti");
+}
+
+/**
+ * F4 (second half): save a voice-note comment. The audio blob is recorded in the
+ * browser (`MediaRecorder`) and uploaded client-side to Vercel Blob; here we only
+ * persist its URL as `Comment.audioUrl`, optionally anchored to the current second
+ * of the review proxy (same `videoTimestamp` mechanism as text comments). `body`
+ * is stored empty — the audio IS the message.
+ */
+export async function addAudioCommentAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const contentId = String(formData.get("contentId") ?? "") || null;
+  const audioUrl = String(formData.get("audioUrl") ?? "").trim();
+  if (!contentId || !audioUrl) return;
+  const tsRaw = String(formData.get("videoTimestamp") ?? "").trim();
+  const ts = tsRaw === "" ? null : Number(tsRaw);
+  const videoTimestamp = ts != null && Number.isFinite(ts) && ts >= 0 ? ts : null;
+  await addComment(ctx.workspaceId, {
+    authorId: ctx.user.id,
+    body: "",
+    contentId,
+    audioUrl,
+    videoTimestamp,
+  });
+  revalidatePath(`/contenuti/${contentId}`);
+  revalidatePath("/contenuti");
+}
+
+/** F4: persist the URL of the compressed review proxy (uploaded client-side to Blob). */
+export async function setVideoProxyAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const contentId = String(formData.get("contentId") ?? "");
+  const url = String(formData.get("videoProxyUrl") ?? "").trim() || null;
+  if (!contentId || !url) return;
+  await setContentVideoProxy(ctx.workspaceId, contentId, url);
+  revalidatePath(`/contenuti/${contentId}`);
+  revalidatePath("/contenuti");
+}
+
+/** F4: save/clear the external master link (Drive/iCloud) — path C. Empty clears it. */
+export async function setMasterLinkAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const contentId = String(formData.get("contentId") ?? "");
+  if (!contentId) return;
+  const link = String(formData.get("masterLink") ?? "").trim() || null;
+  await setContentMasterLink(ctx.workspaceId, contentId, link);
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
 }

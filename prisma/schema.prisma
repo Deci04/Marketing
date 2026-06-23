@@ -152,6 +152,8 @@ model Content {
   notes            String?
   materialsUrl     String?
   thumbnailUrl     String?
+  videoProxyUrl    String? // proxy compresso di review su Blob
+  masterLink       String? // link al master esterno (Drive/iCloud), percorso C
   // performance (filled after publishing)
   views            Int?
   reach            Int?
@@ -179,6 +181,8 @@ model Comment {
   blockId     String?
   authorId    String
   body        String
+  audioUrl    String? // commento vocale su Blob
+  videoTimestamp Float? // secondo del video a cui è ancorato (null = generico)
   createdAt   DateTime  @default(now())
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   content     Content?  @relation(fields: [contentId], references: [id], onDelete: Cascade)

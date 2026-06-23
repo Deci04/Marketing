@@ -24,6 +24,9 @@ import { updatePerformanceAction } from "@/app/(app)/kpi/actions";
 import { FORMAT_ORDER, FORMAT_LABELS, FORMAT_CHIP } from "@/lib/format";
 import { classChip } from "@/lib/classes";
 import { ClassSelect, type SelectableClass } from "@/components/class-select";
+import { VideoReview, type ReviewComment } from "@/components/video-review";
+import { AudioRecorder } from "@/components/audio-recorder";
+import { AudioComment } from "@/components/audio-comment";
 import type { ContentFormat } from "@prisma/client";
 
 export type ModalClass = { id: string; name: string; color: string | null };
@@ -38,6 +41,8 @@ export type ModalContent = {
   publishAtInput: string | null;
   thumbnailUrl: string | null;
   materialsUrl: string | null;
+  videoProxyUrl: string | null;
+  masterLink: string | null;
   format: ContentFormat | null;
   classes: ModalClass[];
   block: { label: string; lucaDeliveryAt: string | null; matteoDeliveryAt: string | null } | null;
@@ -57,6 +62,8 @@ export type ModalComment = {
   body: string;
   author: string;
   createdAt: string;
+  videoTimestamp: number | null;
+  audioUrl: string | null;
 };
 
 const STATUS: Record<string, string> = {
@@ -66,7 +73,7 @@ const STATUS: Record<string, string> = {
   Pubblicato: "bg-sage text-sage-ink",
 };
 
-const TABS = ["Panoramica", "Performance", "Materiali", "Commenti"] as const;
+const TABS = ["Panoramica", "Video", "Performance", "Materiali", "Commenti"] as const;
 type Tab = (typeof TABS)[number];
 
 function PerfField({
@@ -356,6 +363,24 @@ export function ContentModal({
                 </div>
               )}
 
+              {tab === "Video" && (
+                <VideoReview
+                  contentId={content.id}
+                  videoProxyUrl={content.videoProxyUrl}
+                  masterLink={content.masterLink}
+                  comments={comments.map(
+                    (c): ReviewComment => ({
+                      id: c.id,
+                      body: c.body,
+                      author: c.author,
+                      createdAt: c.createdAt,
+                      videoTimestamp: c.videoTimestamp,
+                      audioUrl: c.audioUrl,
+                    })
+                  )}
+                />
+              )}
+
               {tab === "Performance" && (
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-border bg-card p-4">
@@ -476,12 +501,17 @@ export function ContentModal({
                             </button>
                           </div>
                         </div>
-                        <p className="mt-1 text-sm text-ink/90">{c.body}</p>
+                        {c.body && (
+                          <p className="mt-1 text-sm text-ink/90">{c.body}</p>
+                        )}
+                        {c.audioUrl && <AudioComment src={c.audioUrl} />}
                       </div>
                     ))}
                   </div>
                   <form
                     action={async (fd) => {
+                      const body = String(fd.get("body") ?? "").trim();
+                      if (!body) return;
                       await addCommentAction(fd);
                       toast.success("Commento aggiunto");
                     }}
@@ -500,6 +530,12 @@ export function ContentModal({
                       <PaperPlaneTilt size={16} weight="fill" />
                     </button>
                   </form>
+                  <div className="flex items-center gap-2 border-t border-border pt-3">
+                    <span className="text-xs text-muted-foreground">
+                      …oppure invia un vocale:
+                    </span>
+                    <AudioRecorder contentId={content.id} />
+                  </div>
                 </div>
               )}
             </div>

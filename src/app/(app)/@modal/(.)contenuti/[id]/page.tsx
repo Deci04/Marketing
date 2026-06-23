@@ -40,6 +40,8 @@ export default async function ContentModalPage({
     publishAtInput: c.publishAt ? c.publishAt.toISOString().slice(0, 10) : null,
     thumbnailUrl: c.thumbnailUrl,
     materialsUrl: c.materialsUrl ?? null,
+    videoProxyUrl: c.videoProxyUrl ?? null,
+    masterLink: c.masterLink ?? null,
     block: c.block
       ? {
           label: c.block.label,
@@ -63,6 +65,8 @@ export default async function ContentModalPage({
     body: cm.body,
     author: cm.author?.name ?? cm.author?.email ?? "—",
     createdAt: cm.createdAt.toISOString(),
+    videoTimestamp: cm.videoTimestamp ?? null,
+    audioUrl: cm.audioUrl ?? null,
   }));
 
   return (
