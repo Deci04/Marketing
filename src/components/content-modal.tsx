@@ -73,7 +73,7 @@ const STATUS: Record<string, string> = {
   Pubblicato: "bg-sage text-sage-ink",
 };
 
-const TABS = ["Panoramica", "Video", "Performance", "Materiali", "Commenti"] as const;
+const TABS = ["Panoramica", "Video", "Performance", "Materiali e commenti"] as const;
 type Tab = (typeof TABS)[number];
 
 function PerfField({
@@ -188,7 +188,7 @@ export function ContentModal({
                   }`}
                 >
                   {t}
-                  {t === "Commenti" && comments.length > 0 && (
+                  {t === "Materiali e commenti" && comments.length > 0 && (
                     <span className="ml-1 text-xs opacity-70">({comments.length})</span>
                   )}
                 </button>
@@ -428,114 +428,121 @@ export function ContentModal({
                 </div>
               )}
 
-              {tab === "Materiali" && (
-                <div className="space-y-4">
-                  {content.thumbnailUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={content.thumbnailUrl}
-                      alt=""
-                      className="max-h-56 w-full rounded-2xl border border-border object-cover"
-                    />
-                  )}
-                  <form
-                    action={async (fd) => {
-                      await setThumbnailAction(fd);
-                      toast.success("Anteprima aggiornata");
-                    }}
-                    className="space-y-3"
-                  >
-                    <input type="hidden" name="contentId" value={content.id} />
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <UploadSimple size={16} />
-                      <input
-                        type="file"
-                        name="file"
-                        accept="image/*"
-                        className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-full file:border-0 file:bg-ink file:px-3 file:py-1.5 file:text-paper"
+              {tab === "Materiali e commenti" && (
+                <div className="space-y-6">
+                  <section className="space-y-4">
+                    <h3 className="text-sm font-medium text-muted-foreground">Materiale</h3>
+                    {content.thumbnailUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={content.thumbnailUrl}
+                        alt=""
+                        className="max-h-56 w-full rounded-2xl border border-border object-cover"
                       />
+                    )}
+                    <form
+                      action={async (fd) => {
+                        await setThumbnailAction(fd);
+                        toast.success("Anteprima aggiornata");
+                      }}
+                      className="space-y-3"
+                    >
+                      <input type="hidden" name="contentId" value={content.id} />
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <UploadSimple size={16} />
+                        <input
+                          type="file"
+                          name="file"
+                          accept="image/*"
+                          className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-full file:border-0 file:bg-ink file:px-3 file:py-1.5 file:text-paper"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          name="thumbnailUrl"
+                          placeholder="…o incolla un URL immagine"
+                          className="flex-1 rounded-[12px] border border-border bg-secondary/70 px-3.5 py-2.5 text-sm outline-none focus:border-ink/30 focus:bg-paper"
+                        />
+                        <button className="rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground">
+                          Salva
+                        </button>
+                      </div>
+                    </form>
+                    {content.materialsUrl && (
+                      <a href={content.materialsUrl} className="inline-block text-sm text-blush-ink underline">
+                        Apri link materiali ↗
+                      </a>
+                    )}
+                  </section>
+
+                  <section className="space-y-4 border-t border-border pt-5">
+                    <h3 className="text-sm font-medium text-muted-foreground">
+                      Commenti{comments.length > 0 ? ` (${comments.length})` : ""}
+                    </h3>
+                    <p className="-mt-2 text-xs text-muted-foreground">
+                      Per ancorare i commenti al minutaggio usa la tab <span className="font-medium">Video</span>.
+                    </p>
+                    <div className="space-y-3">
+                      {comments.length === 0 && (
+                        <p className="text-sm text-muted-foreground">Ancora nessun commento.</p>
+                      )}
+                      {comments.map((c) => (
+                        <div key={c.id} className="group/cm rounded-2xl border border-border bg-card p-3.5">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-sm font-medium text-ink">{c.author}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(c.createdAt).toLocaleDateString("it-IT", { day: "numeric", month: "short" })}
+                              </span>
+                              <button
+                                aria-label="Elimina commento"
+                                onClick={async () => {
+                                  await deleteCommentAction(c.id, content.id);
+                                  toast.success("Commento eliminato");
+                                  router.refresh();
+                                }}
+                                className="text-muted-foreground opacity-0 transition-opacity hover:text-coral-ink group-hover/cm:opacity-100"
+                              >
+                                <Trash size={13} />
+                              </button>
+                            </div>
+                          </div>
+                          {c.body && (
+                            <p className="mt-1 text-sm text-ink/90">{c.body}</p>
+                          )}
+                          {c.audioUrl && <AudioComment src={c.audioUrl} />}
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex gap-2">
+                    <form
+                      action={async (fd) => {
+                        const body = String(fd.get("body") ?? "").trim();
+                        if (!body) return;
+                        await addCommentAction(fd);
+                        toast.success("Commento aggiunto");
+                      }}
+                      className="flex gap-2"
+                    >
+                      <input type="hidden" name="contentId" value={content.id} />
                       <input
-                        name="thumbnailUrl"
-                        placeholder="…o incolla un URL immagine"
+                        name="body"
+                        placeholder="Scrivi un commento…"
                         className="flex-1 rounded-[12px] border border-border bg-secondary/70 px-3.5 py-2.5 text-sm outline-none focus:border-ink/30 focus:bg-paper"
                       />
-                      <button className="rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground">
-                        Salva
+                      <button
+                        aria-label="Invia"
+                        className="flex items-center justify-center rounded-full bg-primary px-4 text-primary-foreground"
+                      >
+                        <PaperPlaneTilt size={16} weight="fill" />
                       </button>
+                    </form>
+                    <div className="flex items-center gap-2 border-t border-border pt-3">
+                      <span className="text-xs text-muted-foreground">
+                        …oppure invia un vocale:
+                      </span>
+                      <AudioRecorder contentId={content.id} />
                     </div>
-                  </form>
-                  {content.materialsUrl && (
-                    <a href={content.materialsUrl} className="inline-block text-sm text-blush-ink underline">
-                      Apri link materiali ↗
-                    </a>
-                  )}
-                </div>
-              )}
-
-              {tab === "Commenti" && (
-                <div className="space-y-4">
-                  <div className="space-y-3">
-                    {comments.length === 0 && (
-                      <p className="text-sm text-muted-foreground">Ancora nessun commento.</p>
-                    )}
-                    {comments.map((c) => (
-                      <div key={c.id} className="group/cm rounded-2xl border border-border bg-card p-3.5">
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span className="text-sm font-medium text-ink">{c.author}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(c.createdAt).toLocaleDateString("it-IT", { day: "numeric", month: "short" })}
-                            </span>
-                            <button
-                              aria-label="Elimina commento"
-                              onClick={async () => {
-                                await deleteCommentAction(c.id, content.id);
-                                toast.success("Commento eliminato");
-                                router.refresh();
-                              }}
-                              className="text-muted-foreground opacity-0 transition-opacity hover:text-coral-ink group-hover/cm:opacity-100"
-                            >
-                              <Trash size={13} />
-                            </button>
-                          </div>
-                        </div>
-                        {c.body && (
-                          <p className="mt-1 text-sm text-ink/90">{c.body}</p>
-                        )}
-                        {c.audioUrl && <AudioComment src={c.audioUrl} />}
-                      </div>
-                    ))}
-                  </div>
-                  <form
-                    action={async (fd) => {
-                      const body = String(fd.get("body") ?? "").trim();
-                      if (!body) return;
-                      await addCommentAction(fd);
-                      toast.success("Commento aggiunto");
-                    }}
-                    className="flex gap-2"
-                  >
-                    <input type="hidden" name="contentId" value={content.id} />
-                    <input
-                      name="body"
-                      placeholder="Scrivi un commento…"
-                      className="flex-1 rounded-[12px] border border-border bg-secondary/70 px-3.5 py-2.5 text-sm outline-none focus:border-ink/30 focus:bg-paper"
-                    />
-                    <button
-                      aria-label="Invia"
-                      className="flex items-center justify-center rounded-full bg-primary px-4 text-primary-foreground"
-                    >
-                      <PaperPlaneTilt size={16} weight="fill" />
-                    </button>
-                  </form>
-                  <div className="flex items-center gap-2 border-t border-border pt-3">
-                    <span className="text-xs text-muted-foreground">
-                      …oppure invia un vocale:
-                    </span>
-                    <AudioRecorder contentId={content.id} />
-                  </div>
+                  </section>
                 </div>
               )}
             </div>
