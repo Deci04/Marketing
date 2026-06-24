@@ -1,81 +1,43 @@
-import { put } from "@vercel/blob";
+import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
 import { currentContext } from "@/lib/current";
 
 /**
- * F4 — server-side upload endpoint for the compressed review proxy and for
- * audio comments (voice notes).
+ * F4 — token endpoint per gli upload client→Blob diretti (proxy video, foto,
+ * note vocali).
  *
- * The browser compresses the video to a lightweight proxy (or records a short
- * voice note), then POSTs the file here as multipart form-data; we `put()` it to
- * Vercel Blob with the workspace token and return the public URL, which the
- * client then persists via a Server Action.
+ * Il browser carica direttamente su Vercel Blob con `upload()` di
+ * `@vercel/blob/client`, che chiama questa route per ottenere un token a tempo,
+ * con scope sul workspace autenticato. L'upload diretto **bypassa il limite di
+ * body delle Vercel Functions** (~4.5MB), quindi funziona in produzione anche
+ * per file grandi.
  *
- * We use server-side `put()` (not the `@vercel/blob/client` client-upload
- * handshake) because the latter needs a reachable callback URL and returns 403
- * on localhost. Proxies/voice notes are small, so the function body limit is fine.
+ * NB: NON impostiamo `onUploadCompleted`. La persistenza dell'URL avviene via
+ * Server Action dopo che il client riceve l'URL del blob; omettere la callback
+ * evita il webhook che Vercel Blob non riesce a raggiungere su localhost (era la
+ * causa del 403 in sviluppo).
  */
-const ALLOWED = [
-  // video proxy (review)
-  "video/webm",
-  "video/mp4",
-  "video/quicktime",
-  // voice notes
-  "audio/webm",
-  "audio/ogg",
-  "audio/mp4",
-  "audio/mpeg",
-  // materiali foto (post / carosello)
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "image/avif",
-  "image/heic",
-  "image/heif",
-];
-const MAX_BYTES = 25 * 1024 * 1024; // 25MB — proxy compresso / foto / nota vocale
-
 export async function POST(request: Request): Promise<NextResponse> {
-  const ctx = await currentContext();
-  if (!ctx) {
-    return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
-  }
-
-  let form: FormData;
-  try {
-    form = await request.formData();
-  } catch {
-    return NextResponse.json({ error: "Form non valido" }, { status: 400 });
-  }
-
-  const file = form.get("file");
-  const prefix = String(form.get("prefix") ?? "uploads").replace(/[^a-zA-Z0-9/_-]/g, "");
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "File mancante" }, { status: 400 });
-  }
-  // MediaRecorder reports the type with codec parameters (e.g.
-  // "video/webm;codecs=vp9,opus"). Compare and store only the base MIME type.
-  const baseType = file.type.split(";")[0].trim().toLowerCase();
-  if (!ALLOWED.includes(baseType)) {
-    return NextResponse.json({ error: `Tipo non consentito (${file.type})` }, { status: 400 });
-  }
-  if (file.size > MAX_BYTES) {
-    return NextResponse.json(
-      { error: "File troppo grande (max 25MB per il proxy)" },
-      { status: 413 }
-    );
-  }
+  const body = (await request.json()) as HandleUploadBody;
 
   try {
-    const blob = await put(`${prefix}/${file.name}`, file, {
-      access: "public",
-      addRandomSuffix: true,
-      contentType: baseType,
-      token: process.env.BLOB_READ_WRITE_TOKEN,
+    const result = await handleUpload({
+      body,
+      request,
+      onBeforeGenerateToken: async () => {
+        // Solo membri autenticati del workspace possono caricare.
+        const ctx = await currentContext();
+        if (!ctx) throw new Error("Non autorizzato");
+        return {
+          allowedContentTypes: ["video/*", "image/*", "audio/*"],
+          maximumSizeInBytes: 500 * 1024 * 1024, // 500MB
+          addRandomSuffix: true,
+          tokenPayload: JSON.stringify({ workspaceId: ctx.workspaceId }),
+        };
+      },
     });
-    return NextResponse.json({ url: blob.url });
+    return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+    return NextResponse.json({ error: (error as Error).message }, { status: 400 });
   }
 }

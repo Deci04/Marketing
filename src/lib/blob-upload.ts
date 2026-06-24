@@ -1,25 +1,29 @@
 "use client";
 
+import { upload } from "@vercel/blob/client";
+
 /**
- * Upload a file to Vercel Blob **through our server route** (server-side `put`).
+ * Carica un file su Vercel Blob **direttamente dal client** (upload client→Blob).
  *
- * We deliberately don't use `@vercel/blob/client` `upload()`: its client-upload
- * handshake needs a reachable `onUploadCompleted` callback URL, which fails on
- * `localhost` (the PUT to Blob returns 403). Routing the (already compressed)
- * proxy / short voice note through the server is robust in dev and prod alike.
+ * Usiamo `upload()` di `@vercel/blob/client`: il browser carica direttamente su
+ * Blob usando un token a tempo emesso dalla route `/api/video-upload`. Questo
+ * **bypassa il limite di body delle Vercel Functions** (~4.5MB), quindi funziona
+ * in produzione anche per file grandi. La route NON registra `onUploadCompleted`,
+ * così non c'è la callback webhook che falliva su localhost: l'upload diretto
+ * funziona sia in sviluppo sia in produzione. L'URL risultante viene poi
+ * persistito via Server Action dal chiamante.
  */
 export async function uploadViaServer(
   file: Blob,
   prefix: string,
   filename: string
 ): Promise<{ url: string }> {
-  const form = new FormData();
-  form.set("file", file, filename);
-  form.set("prefix", prefix);
-  const res = await fetch("/api/video-upload", { method: "POST", body: form });
-  if (!res.ok) {
-    const msg = await res.json().catch(() => ({}));
-    throw new Error(msg.error ?? `Upload fallito (${res.status})`);
-  }
-  return res.json();
+  // Tipo MIME base, senza parametri codec (es. "video/webm;codecs=vp9,opus").
+  const baseType = (file.type || "").split(";")[0].trim() || undefined;
+  const blob = await upload(`${prefix}/${filename}`, file, {
+    access: "public",
+    handleUploadUrl: "/api/video-upload",
+    contentType: baseType,
+  });
+  return { url: blob.url };
 }
