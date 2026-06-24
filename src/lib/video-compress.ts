@@ -38,6 +38,9 @@ function pickMimeType(): string | null {
     "video/webm;codecs=vp9,opus",
     "video/webm;codecs=vp8,opus",
     "video/webm",
+    // Safari non registra WebM: ricade su MP4 (H.264/AAC).
+    'video/mp4;codecs="avc1.42E01E,mp4a.40.2"',
+    "video/mp4",
   ];
   for (const t of candidates) {
     if (MediaRecorder.isTypeSupported(t)) return t;
@@ -71,13 +74,15 @@ export async function compressToProxy(
   const url = URL.createObjectURL(file);
   const video = document.createElement("video");
   video.src = url;
-  // Muto l'elemento: garantisce l'autoplay (play() senza gesto utente) e nessun
-  // suono a voce durante la compressione. L'audio viene comunque catturato da
-  // element.captureStream() (vedi sotto), che funziona anche con muted.
-  video.muted = true;
+  // L'elemento NON è mutato: in un browser reale un <video muted> cattura una
+  // traccia audio SILENZIOSA. Per non far sentire nulla durante la compressione
+  // instradiamo l'audio via WebAudio verso uno stream di cattura, senza collegarlo
+  // alle casse (ctx.destination). play() è autorizzato dal gesto utente (click sul file).
   video.playsInline = true;
   // Required to read frames from a local file without tainting the canvas.
   video.crossOrigin = "anonymous";
+
+  let audioCtx: AudioContext | null = null;
 
   try {
     await new Promise<void>((resolve, reject) => {
@@ -101,18 +106,29 @@ export async function compressToProxy(
       canvas as HTMLCanvasElement & { captureStream: (fps?: number) => MediaStream }
     ).captureStream(30);
 
-    // Stream della sorgente per l'audio. NB: NON usiamo WebAudio
-    // (createMediaElementSource toglierebbe l'esenzione autoplay del `muted`,
-    // bloccando video.play() senza gesto utente). element.captureStream cattura
-    // l'audio anche con l'elemento mutato — ma la traccia compare solo DOPO
-    // l'avvio della riproduzione, quindi la aggiungiamo dopo play().
-    const elementWithCapture = video as HTMLVideoElement & {
-      captureStream?: () => MediaStream;
-      mozCaptureStream?: () => MediaStream;
-    };
-    const elStream =
-      elementWithCapture.captureStream?.() ??
-      elementWithCapture.mozCaptureStream?.();
+    // Audio: lo catturiamo dall'elemento (non mutato) via WebAudio.
+    // createMediaElementSource intercetta l'audio decodificato e lo manda a un
+    // MediaStreamDestination (registrato dal recorder) ma NON a ctx.destination,
+    // così non si sente durante la compressione. La traccia è disponibile subito,
+    // quindi possiamo aggiungerla prima di creare il recorder.
+    try {
+      const AudioCtor =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (AudioCtor) {
+        audioCtx = new AudioCtor();
+        const source = audioCtx.createMediaElementSource(video);
+        const dest = audioCtx.createMediaStreamDestination();
+        source.connect(dest);
+        for (const track of dest.stream.getAudioTracks()) {
+          canvasStream.addTrack(track);
+        }
+      }
+    } catch {
+      // Niente audio (WebAudio non disponibile): il proxy sarà muto, ma la
+      // compressione del video procede comunque.
+    }
 
     let rafId = 0;
     const drawLoop = () => {
@@ -124,18 +140,6 @@ export async function compressToProxy(
       rafId = requestAnimationFrame(drawLoop);
     };
 
-    // Avvia la riproduzione (mutata → autoplay consentito), poi attendi che la
-    // traccia audio sia disponibile e aggiungila allo stream da registrare.
-    await video.play();
-    if (elStream) {
-      for (let i = 0; i < 20 && elStream.getAudioTracks().length === 0; i++) {
-        await new Promise((r) => setTimeout(r, 50));
-      }
-      for (const track of elStream.getAudioTracks()) canvasStream.addTrack(track);
-    }
-
-    // Il recorder viene creato DOPO aver aggiunto l'audio, così la traccia è
-    // inclusa nella registrazione.
     const recorder = new MediaRecorder(canvasStream, {
       mimeType,
       videoBitsPerSecond: TARGET_VIDEO_BITRATE,
@@ -150,6 +154,8 @@ export async function compressToProxy(
 
     recorder.start(250);
     drawLoop();
+    if (audioCtx && audioCtx.state === "suspended") await audioCtx.resume();
+    await video.play();
 
     await new Promise<void>((resolve) => {
       if (video.ended) return resolve();
@@ -161,9 +167,11 @@ export async function compressToProxy(
     const blob = await recordingDone;
     onProgress?.(1);
 
+    const ext = mimeType.startsWith("video/mp4") ? "mp4" : "webm";
     const base = file.name.replace(/\.[^.]+$/, "");
-    return { blob, mimeType, filename: `${base}-proxy.webm` };
+    return { blob, mimeType, filename: `${base}-proxy.${ext}` };
   } finally {
     URL.revokeObjectURL(url);
+    if (audioCtx) audioCtx.close().catch(() => {});
   }
 }
