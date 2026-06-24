@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { currentContext } from "@/lib/current";
+import { currentContext, currentUser } from "@/lib/current";
 import { signOut } from "@/lib/auth";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { ChatPanel } from "@/components/chat/chat-panel";
+import { NoWorkspace } from "@/components/no-workspace";
 import { SignOut } from "@phosphor-icons/react/dist/ssr";
 
 export default async function AppLayout({
@@ -12,11 +14,12 @@ export default async function AppLayout({
   children: React.ReactNode;
   modal?: React.ReactNode;
 }) {
+  const user = await currentUser();
+  // No valid session (e.g. stale/undecryptable cookie) → back to login.
+  if (!user) redirect("/login");
   const ctx = await currentContext();
-  // Stale/undecryptable session cookie (e.g. AUTH_SECRET changed): the proxy
-  // only checks the cookie exists, so send invalid sessions back to login
-  // (re-signing in overwrites the bad cookie) instead of showing an empty shell.
-  if (!ctx) redirect("/login");
+  // Logged in but not invited to any workspace yet → empty "ask for invite" state.
+  if (!ctx) return <NoWorkspace email={user.email} isAdmin={user.isAdmin} />;
   const name = ctx.user.name ?? ctx.user.email ?? "—";
   const initials = name.slice(0, 1).toUpperCase();
   const wsInitial = (ctx?.workspace.name ?? "L").slice(0, 1);
@@ -35,12 +38,13 @@ export default async function AppLayout({
           <SidebarNav />
 
           <div className="mt-auto flex flex-col gap-2">
-            <div
-              className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-paper text-sm text-ink"
-              title={name}
+            <Link
+              href="/profilo"
+              title={`${name} — profilo e spazi`}
+              className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-paper text-sm text-ink transition-colors hover:bg-secondary hover:text-ink"
             >
               {initials}
-            </div>
+            </Link>
             <form
               action={async () => {
                 "use server";

@@ -9,25 +9,20 @@ async function main() {
     create: { id: "ws_luca", name: "Luca" },
   });
 
-  const people = [
-    { email: "matteodecenzo@gmail.com", name: "Matteo", role: Role.ADMIN },
-    // TODO: replace with Luca's real email when known.
-    { email: "luca@example.com", name: "Luca", role: Role.COLLABORATOR },
-  ];
-
-  for (const p of people) {
-    const user = await db.user.upsert({
-      where: { email: p.email },
-      update: { name: p.name },
-      create: { email: p.email, name: p.name },
-    });
-    await db.membership.upsert({
-      where: { userId_workspaceId: { userId: user.id, workspaceId: ws.id } },
-      update: { role: p.role },
-      create: { userId: user.id, workspaceId: ws.id, role: p.role },
-    });
-  }
-  console.log("Seeded workspace 'Luca' with Matteo (admin) + Luca.");
+  // Matteo is the super-admin: he sees /admin and invites collaborators by
+  // email into each workspace. Other users are added via the invite flow, not
+  // the seed.
+  const matteo = await db.user.upsert({
+    where: { email: "matteodecenzo@gmail.com" },
+    update: { name: "Matteo", isAdmin: true },
+    create: { email: "matteodecenzo@gmail.com", name: "Matteo", isAdmin: true },
+  });
+  await db.membership.upsert({
+    where: { userId_workspaceId: { userId: matteo.id, workspaceId: ws.id } },
+    update: { role: Role.ADMIN },
+    create: { userId: matteo.id, workspaceId: ws.id, role: Role.ADMIN },
+  });
+  console.log("Seeded workspace 'Luca' with Matteo (super-admin). Invite others from /admin.");
 }
 
 main().finally(() => db.$disconnect());

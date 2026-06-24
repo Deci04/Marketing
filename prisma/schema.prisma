@@ -38,6 +38,7 @@ model User {
   name        String?
   email       String       @unique
   image       String?
+  isAdmin     Boolean      @default(false)
   createdAt   DateTime     @default(now())
   memberships Membership[]
   accounts    Account[]

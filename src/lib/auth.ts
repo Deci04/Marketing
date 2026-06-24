@@ -12,12 +12,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Credentials({
       name: "Email",
       credentials: { email: { label: "Email", type: "email" } },
-      // Local-first: any seeded user signs in by email (no password yet).
+      // Invite-based multi-tenant: anyone can sign in by email; the account is
+      // created on first login but sees nothing until an admin invites them to a
+      // workspace (membership). No password yet.
       async authorize(creds) {
-        const email = String(creds?.email ?? "").toLowerCase();
-        if (!email) return null;
-        const user = await db.user.findUnique({ where: { email } });
-        return user ? { id: user.id, email: user.email, name: user.name } : null;
+        const email = String(creds?.email ?? "").toLowerCase().trim();
+        if (!email || !email.includes("@")) return null;
+        const user = await db.user.upsert({
+          where: { email },
+          update: {},
+          create: { email },
+        });
+        return { id: user.id, email: user.email, name: user.name };
       },
     }),
   ],
