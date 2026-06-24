@@ -71,10 +71,13 @@ export async function compressToProxy(
   const url = URL.createObjectURL(file);
   const video = document.createElement("video");
   video.src = url;
-  video.muted = true;
+  // NB: non mutiamo l'elemento, altrimenti l'audio catturato sarebbe silenzioso.
+  // Lo instradiamo via WebAudio verso uno stream (catturato ma non riprodotto).
   video.playsInline = true;
   // Required to read frames from a local file without tainting the canvas.
   video.crossOrigin = "anonymous";
+
+  let audioCtx: AudioContext | null = null;
 
   try {
     await new Promise<void>((resolve, reject) => {
@@ -98,16 +101,27 @@ export async function compressToProxy(
       canvas as HTMLCanvasElement & { captureStream: (fps?: number) => MediaStream }
     ).captureStream(30);
 
-    // Mix in audio from the source, if any, via a captured stream on the element.
-    const elementWithCapture = video as HTMLVideoElement & {
-      captureStream?: () => MediaStream;
-      mozCaptureStream?: () => MediaStream;
-    };
-    const elStream =
-      elementWithCapture.captureStream?.() ??
-      elementWithCapture.mozCaptureStream?.();
-    const audioTracks = elStream?.getAudioTracks() ?? [];
-    for (const track of audioTracks) canvasStream.addTrack(track);
+    // Cattura l'audio della sorgente via WebAudio: lo colleghiamo a uno
+    // MediaStreamDestination (catturato dal recorder) ma NON a ctx.destination,
+    // così non viene riprodotto ad alta voce durante la compressione.
+    try {
+      const AudioCtor =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (AudioCtor) {
+        audioCtx = new AudioCtor();
+        if (audioCtx.state === "suspended") await audioCtx.resume();
+        const source = audioCtx.createMediaElementSource(video);
+        const dest = audioCtx.createMediaStreamDestination();
+        source.connect(dest);
+        for (const track of dest.stream.getAudioTracks()) {
+          canvasStream.addTrack(track);
+        }
+      }
+    } catch {
+      // Nessun audio disponibile (o WebAudio non supportato): proxy muto.
+    }
 
     const recorder = new MediaRecorder(canvasStream, {
       mimeType,
@@ -149,5 +163,6 @@ export async function compressToProxy(
     return { blob, mimeType, filename: `${base}-proxy.webm` };
   } finally {
     URL.revokeObjectURL(url);
+    if (audioCtx) audioCtx.close().catch(() => {});
   }
 }
