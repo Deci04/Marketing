@@ -71,15 +71,13 @@ export async function compressToProxy(
   const url = URL.createObjectURL(file);
   const video = document.createElement("video");
   video.src = url;
-  // Muto l'elemento: senza mute la autoplay policy blocca video.play() e la
-  // compressione si pianta. L'audio viene comunque catturato via WebAudio:
-  // createMediaElementSource intercetta la traccia decodificata a monte del mute.
+  // Muto l'elemento: garantisce l'autoplay (play() senza gesto utente) e nessun
+  // suono a voce durante la compressione. L'audio viene comunque catturato da
+  // element.captureStream() (vedi sotto), che funziona anche con muted.
   video.muted = true;
   video.playsInline = true;
   // Required to read frames from a local file without tainting the canvas.
   video.crossOrigin = "anonymous";
-
-  let audioCtx: AudioContext | null = null;
 
   try {
     await new Promise<void>((resolve, reject) => {
@@ -103,28 +101,41 @@ export async function compressToProxy(
       canvas as HTMLCanvasElement & { captureStream: (fps?: number) => MediaStream }
     ).captureStream(30);
 
-    // Cattura l'audio della sorgente via WebAudio: lo colleghiamo a uno
-    // MediaStreamDestination (catturato dal recorder) ma NON a ctx.destination,
-    // così non viene riprodotto ad alta voce durante la compressione.
-    try {
-      const AudioCtor =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext?: typeof AudioContext })
-          .webkitAudioContext;
-      if (AudioCtor) {
-        audioCtx = new AudioCtor();
-        if (audioCtx.state === "suspended") await audioCtx.resume();
-        const source = audioCtx.createMediaElementSource(video);
-        const dest = audioCtx.createMediaStreamDestination();
-        source.connect(dest);
-        for (const track of dest.stream.getAudioTracks()) {
-          canvasStream.addTrack(track);
-        }
+    // Stream della sorgente per l'audio. NB: NON usiamo WebAudio
+    // (createMediaElementSource toglierebbe l'esenzione autoplay del `muted`,
+    // bloccando video.play() senza gesto utente). element.captureStream cattura
+    // l'audio anche con l'elemento mutato — ma la traccia compare solo DOPO
+    // l'avvio della riproduzione, quindi la aggiungiamo dopo play().
+    const elementWithCapture = video as HTMLVideoElement & {
+      captureStream?: () => MediaStream;
+      mozCaptureStream?: () => MediaStream;
+    };
+    const elStream =
+      elementWithCapture.captureStream?.() ??
+      elementWithCapture.mozCaptureStream?.();
+
+    let rafId = 0;
+    const drawLoop = () => {
+      ctx.drawImage(video, 0, 0, outW, outH);
+      const d = video.duration;
+      if (Number.isFinite(d) && d > 0 && onProgress) {
+        onProgress(Math.min(1, video.currentTime / d));
       }
-    } catch {
-      // Nessun audio disponibile (o WebAudio non supportato): proxy muto.
+      rafId = requestAnimationFrame(drawLoop);
+    };
+
+    // Avvia la riproduzione (mutata → autoplay consentito), poi attendi che la
+    // traccia audio sia disponibile e aggiungila allo stream da registrare.
+    await video.play();
+    if (elStream) {
+      for (let i = 0; i < 20 && elStream.getAudioTracks().length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      for (const track of elStream.getAudioTracks()) canvasStream.addTrack(track);
     }
 
+    // Il recorder viene creato DOPO aver aggiunto l'audio, così la traccia è
+    // inclusa nella registrazione.
     const recorder = new MediaRecorder(canvasStream, {
       mimeType,
       videoBitsPerSecond: TARGET_VIDEO_BITRATE,
@@ -133,26 +144,15 @@ export async function compressToProxy(
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data);
     };
-
-    const duration = Number.isFinite(video.duration) ? video.duration : 0;
-    let rafId = 0;
-    const drawLoop = () => {
-      ctx.drawImage(video, 0, 0, outW, outH);
-      if (duration > 0 && onProgress) {
-        onProgress(Math.min(1, video.currentTime / duration));
-      }
-      rafId = requestAnimationFrame(drawLoop);
-    };
-
     const recordingDone = new Promise<Blob>((resolve) => {
       recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
     });
 
     recorder.start(250);
     drawLoop();
-    await video.play();
 
     await new Promise<void>((resolve) => {
+      if (video.ended) return resolve();
       video.onended = () => resolve();
     });
 
@@ -165,6 +165,5 @@ export async function compressToProxy(
     return { blob, mimeType, filename: `${base}-proxy.webm` };
   } finally {
     URL.revokeObjectURL(url);
-    if (audioCtx) audioCtx.close().catch(() => {});
   }
 }
