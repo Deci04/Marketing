@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
 import { filtersToWhere, type ContentFilters } from "@/lib/classes";
+import { coverUrl } from "@/lib/materials";
 import type { Channel, ContentFormat } from "@prisma/client";
 
 export async function listContents(
@@ -190,6 +191,84 @@ export async function setContentThumbnail(
     where: { id: contentId },
     data: { thumbnailUrl: url },
   });
+}
+
+/** Materiali unificati — elenco materiali di un contenuto (ordinati). */
+export async function listMaterials(workspaceId: string, contentId: string) {
+  const c = await db.content.findFirst({
+    where: scopedWhere(workspaceId, { id: contentId }),
+    select: { id: true },
+  });
+  if (!c) return [];
+  return db.material.findMany({ where: { contentId }, orderBy: { order: "asc" } });
+}
+
+/** Ricalcola la copertina denormalizzata (Content.thumbnailUrl = prima foto). */
+async function recomputeCover(contentId: string) {
+  const materials = await db.material.findMany({
+    where: { contentId },
+    orderBy: { order: "asc" },
+  });
+  const cover = coverUrl(
+    materials.map((m) => ({
+      id: m.id,
+      kind: m.kind as "image" | "video",
+      url: m.url,
+      order: m.order,
+    }))
+  );
+  await db.content.update({ where: { id: contentId }, data: { thumbnailUrl: cover } });
+}
+
+export async function addMaterial(
+  workspaceId: string,
+  contentId: string,
+  kind: "image" | "video",
+  url: string
+) {
+  const c = await db.content.findFirst({
+    where: scopedWhere(workspaceId, { id: contentId }),
+    select: { id: true },
+  });
+  if (!c) return null;
+  const max = await db.material.aggregate({
+    where: { contentId },
+    _max: { order: true },
+  });
+  const m = await db.material.create({
+    data: { contentId, kind, url, order: (max._max.order ?? -1) + 1 },
+  });
+  await recomputeCover(contentId);
+  return m;
+}
+
+export async function removeMaterial(workspaceId: string, materialId: string) {
+  const m = await db.material.findFirst({
+    where: { id: materialId, content: { workspaceId } },
+    select: { id: true, contentId: true },
+  });
+  if (!m) return null;
+  await db.material.delete({ where: { id: materialId } });
+  await recomputeCover(m.contentId);
+  return { contentId: m.contentId };
+}
+
+export async function reorderMaterials(
+  workspaceId: string,
+  contentId: string,
+  orderedIds: string[]
+) {
+  const c = await db.content.findFirst({
+    where: scopedWhere(workspaceId, { id: contentId }),
+    select: { id: true },
+  });
+  if (!c) return;
+  await db.$transaction(
+    orderedIds.map((id, i) =>
+      db.material.update({ where: { id }, data: { order: i } })
+    )
+  );
+  await recomputeCover(contentId);
 }
 
 /** F4: store the URL of the compressed review proxy (lightweight, on Blob).
