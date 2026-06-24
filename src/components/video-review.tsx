@@ -78,6 +78,35 @@ export function VideoReview({
     v.play().catch(() => {});
   }
 
+  // I WebM prodotti da MediaRecorder spesso non espongono la durata (Infinity)
+  // finché non si cerca fino alla fine: forziamo il calcolo, poi torniamo a 0.
+  function handleLoadedMetadata(e: React.SyntheticEvent<HTMLVideoElement>) {
+    const v = e.currentTarget;
+    if (Number.isFinite(v.duration) && v.duration > 0) {
+      setDuration(v.duration);
+      return;
+    }
+    const onUpdate = () => {
+      if (Number.isFinite(v.duration) && v.duration > 0) {
+        v.removeEventListener("timeupdate", onUpdate);
+        v.currentTime = 0;
+        setDuration(v.duration);
+      }
+    };
+    v.addEventListener("timeupdate", onUpdate);
+    v.currentTime = 1e7;
+  }
+
+  // Click sulla timeline → seek alla frazione corrispondente.
+  function onTimelineSeek(e: React.MouseEvent<HTMLDivElement>) {
+    const v = videoRef.current;
+    if (!v || !Number.isFinite(duration) || duration <= 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    v.currentTime = frac * duration;
+    setCurrent(frac * duration);
+  }
+
   async function handleFile(file: File) {
     if (busy) return;
     setBusy(true);
@@ -121,14 +150,21 @@ export function VideoReview({
               src={videoUrl}
               controls
               className="w-full bg-black"
-              onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+              onLoadedMetadata={handleLoadedMetadata}
+              onDurationChange={(e) => {
+                const d = e.currentTarget.duration;
+                if (Number.isFinite(d) && d > 0) setDuration(d);
+              }}
               onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime || 0)}
             />
           </div>
 
           {/* Stylized timeline with comment markers */}
           <div className="px-1">
-            <div className="relative h-9">
+            <div
+              className="relative h-9 cursor-pointer"
+              onClick={onTimelineSeek}
+            >
               <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-secondary" />
               {/* played portion */}
               <div
@@ -146,7 +182,10 @@ export function VideoReview({
                   key={c.id}
                   type="button"
                   title={`${formatTimestamp(c.videoTimestamp)} — ${c.author}`}
-                  onClick={() => seekTo(c.videoTimestamp ?? 0)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    seekTo(c.videoTimestamp ?? 0);
+                  }}
                   style={{ left: `${markerPercent(c.videoTimestamp, duration)}%` }}
                   className="absolute top-1/2 z-20 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-blush text-blush-ink shadow-sm ring-1 ring-blush-ink/20 transition-transform hover:scale-110"
                 >
