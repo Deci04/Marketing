@@ -170,9 +170,22 @@ model Content {
   comments         Comment[]
   snapshots        MetricSnapshot[]
   classes          ContentClass[]
+  materials        Material[]
 
   @@index([workspaceId])
   @@index([blockId])
+}
+
+model Material {
+  id        String   @id @default(cuid())
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  kind      String // "image" | "video"
+  url       String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([contentId])
 }
 
 model Comment {
