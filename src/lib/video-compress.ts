@@ -126,8 +126,9 @@ export async function compressToProxy(
         }
       }
     } catch {
-      // Niente audio (WebAudio non disponibile): il proxy sarà muto, ma la
-      // compressione del video procede comunque.
+      // WebAudio non disponibile: muto l'elemento per non riprodurre l'audio a
+      // voce durante la compressione (il proxy sarà muto, ma il video procede).
+      video.muted = true;
     }
 
     let rafId = 0;
