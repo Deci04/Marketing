@@ -44,7 +44,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "File mancante" }, { status: 400 });
   }
-  if (!ALLOWED.includes(file.type)) {
+  // MediaRecorder reports the type with codec parameters (e.g.
+  // "video/webm;codecs=vp9,opus"). Compare and store only the base MIME type.
+  const baseType = file.type.split(";")[0].trim().toLowerCase();
+  if (!ALLOWED.includes(baseType)) {
     return NextResponse.json({ error: `Tipo non consentito (${file.type})` }, { status: 400 });
   }
   if (file.size > MAX_BYTES) {
@@ -58,7 +61,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const blob = await put(`${prefix}/${file.name}`, file, {
       access: "public",
       addRandomSuffix: true,
-      contentType: file.type,
+      contentType: baseType,
       token: process.env.BLOB_READ_WRITE_TOKEN,
     });
     return NextResponse.json({ url: blob.url });
