@@ -8,19 +8,22 @@
 export type MaterialKind = "image" | "video";
 export type MaterialLike = { id: string; kind: MaterialKind; url: string; order: number };
 
-export function sortByOrder<T extends { order: number }>(m: T[]): T[] {
+/** Forma minima accettata: `kind` è una stringa (Prisma non usa l'unione). */
+type MaterialInput = { kind: string; url: string; order: number };
+
+export function sortByOrder<T extends { order: number }>(m: readonly T[]): T[] {
   return [...m].sort((a, b) => a.order - b.order);
 }
 
 export function galleryMode(
-  materials: MaterialLike[]
+  materials: readonly MaterialInput[]
 ): "empty" | "single" | "carousel" | "video" {
   if (materials.length === 0) return "empty";
   if (materials.some((m) => m.kind === "video")) return "video";
   return materials.length > 1 ? "carousel" : "single";
 }
 
-export function coverUrl(materials: MaterialLike[]): string | null {
+export function coverUrl(materials: readonly MaterialInput[]): string | null {
   const images = sortByOrder(materials.filter((m) => m.kind === "image"));
   return images[0]?.url ?? null;
 }

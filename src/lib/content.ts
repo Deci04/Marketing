@@ -22,6 +22,7 @@ export async function getContent(workspaceId: string, id: string) {
       block: true,
       classes: { orderBy: { name: "asc" } },
       comments: { include: { author: true }, orderBy: { createdAt: "asc" } },
+      materials: { orderBy: { order: "asc" } },
     },
   });
 }

@@ -16,15 +16,25 @@ import { currentContext } from "@/lib/current";
  * on localhost. Proxies/voice notes are small, so the function body limit is fine.
  */
 const ALLOWED = [
+  // video proxy (review)
   "video/webm",
   "video/mp4",
   "video/quicktime",
+  // voice notes
   "audio/webm",
   "audio/ogg",
   "audio/mp4",
   "audio/mpeg",
+  // materiali foto (post / carosello)
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/avif",
+  "image/heic",
+  "image/heif",
 ];
-const MAX_BYTES = 25 * 1024 * 1024; // 25MB — compressed proxy / voice note
+const MAX_BYTES = 25 * 1024 * 1024; // 25MB — proxy compresso / foto / nota vocale
 
 export async function POST(request: Request): Promise<NextResponse> {
   const ctx = await currentContext();
