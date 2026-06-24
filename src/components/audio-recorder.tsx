@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { upload } from "@vercel/blob/client";
+import { uploadViaServer } from "@/lib/blob-upload";
 import { toast } from "sonner";
 import { Microphone, Stop, Trash, Spinner } from "@phosphor-icons/react";
 import { addAudioCommentAction } from "@/app/(app)/contenuti/actions";
@@ -180,14 +180,10 @@ export function AudioRecorder({
       const ext = audioExtForMime(mimeRef.current);
       const type = mimeRef.current.split(";")[0] || "audio/webm";
       const file = new File([blob], `voice-${Date.now()}.${ext}`, { type });
-      const result = await upload(
-        `audio-comments/${contentId}/voice-${Date.now()}.${ext}`,
+      const result = await uploadViaServer(
         file,
-        {
-          access: "public",
-          handleUploadUrl: "/api/video-upload",
-          contentType: type,
-        }
+        `audio-comments/${contentId}`,
+        `voice-${Date.now()}.${ext}`
       );
 
       const ts = getTimestamp?.();

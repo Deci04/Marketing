@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { upload } from "@vercel/blob/client";
+import { uploadViaServer } from "@/lib/blob-upload";
 import { toast } from "sonner";
 import {
   FilmSlate,
@@ -111,11 +111,11 @@ export function VideoReview({
 
       setProgress(null); // upload phase
       const proxyFile = new File([toUpload], filename, { type: contentType });
-      const blob = await upload(`video-proxies/${contentId}/${filename}`, proxyFile, {
-        access: "public",
-        handleUploadUrl: "/api/video-upload",
-        contentType,
-      });
+      const blob = await uploadViaServer(
+        proxyFile,
+        `video-proxies/${contentId}`,
+        filename
+      );
 
       const fd = new FormData();
       fd.set("contentId", contentId);

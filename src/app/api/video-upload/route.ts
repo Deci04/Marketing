@@ -1,59 +1,68 @@
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { currentContext } from "@/lib/current";
 
 /**
- * F4 — client-upload token endpoint for the compressed review proxy.
+ * F4 — server-side upload endpoint for the compressed review proxy and for
+ * audio comments (voice notes).
  *
- * The browser compresses the video to a lightweight proxy, then uploads it
- * directly to Vercel Blob using `upload()` from `@vercel/blob/client`, which
- * calls this route to mint a short-lived, scoped client token. Going through
- * the client keeps the (potentially multi-MB) proxy off the Server Action body
- * limit and off our function memory.
+ * The browser compresses the video to a lightweight proxy (or records a short
+ * voice note), then POSTs the file here as multipart form-data; we `put()` it to
+ * Vercel Blob with the workspace token and return the public URL, which the
+ * client then persists via a Server Action.
  *
- * The same route also mints tokens for **audio comments** (voice notes recorded
- * in the browser with `MediaRecorder`): they are uploaded the same way, so we
- * allow their content types here too. The blob URL is then persisted as
- * `Comment.audioUrl` via a Server Action.
+ * We use server-side `put()` (not the `@vercel/blob/client` client-upload
+ * handshake) because the latter needs a reachable callback URL and returns 403
+ * on localhost. Proxies/voice notes are small, so the function body limit is fine.
  */
+const ALLOWED = [
+  "video/webm",
+  "video/mp4",
+  "video/quicktime",
+  "audio/webm",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/mpeg",
+];
+const MAX_BYTES = 25 * 1024 * 1024; // 25MB — compressed proxy / voice note
+
 export async function POST(request: Request): Promise<NextResponse> {
-  const body = (await request.json()) as HandleUploadBody;
+  const ctx = await currentContext();
+  if (!ctx) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+  }
+
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return NextResponse.json({ error: "Form non valido" }, { status: 400 });
+  }
+
+  const file = form.get("file");
+  const prefix = String(form.get("prefix") ?? "uploads").replace(/[^a-zA-Z0-9/_-]/g, "");
+  if (!(file instanceof File)) {
+    return NextResponse.json({ error: "File mancante" }, { status: 400 });
+  }
+  if (!ALLOWED.includes(file.type)) {
+    return NextResponse.json({ error: `Tipo non consentito (${file.type})` }, { status: 400 });
+  }
+  if (file.size > MAX_BYTES) {
+    return NextResponse.json(
+      { error: "File troppo grande (max 25MB per il proxy)" },
+      { status: 413 }
+    );
+  }
 
   try {
-    const jsonResponse = await handleUpload({
-      body,
-      request,
-      onBeforeGenerateToken: async () => {
-        // Only authenticated workspace members may upload.
-        const ctx = await currentContext();
-        if (!ctx) throw new Error("Non autorizzato");
-        return {
-          allowedContentTypes: [
-            "video/webm",
-            "video/mp4",
-            "video/quicktime",
-            // Audio comments (voice notes) recorded via MediaRecorder.
-            "audio/webm",
-            "audio/ogg",
-            "audio/mp4",
-            "audio/mpeg",
-          ],
-          // Proxy is compressed client-side; cap generously to avoid abuse.
-          maximumSizeInBytes: 200 * 1024 * 1024,
-          addRandomSuffix: true,
-          tokenPayload: JSON.stringify({ workspaceId: ctx.workspaceId }),
-        };
-      },
-      // Persistence of videoProxyUrl happens via a Server Action after the
-      // client receives the blob URL, so no onUploadCompleted needed here.
-      onUploadCompleted: async () => {},
+    const blob = await put(`${prefix}/${file.name}`, file, {
+      access: "public",
+      addRandomSuffix: true,
+      contentType: file.type,
+      token: process.env.BLOB_READ_WRITE_TOKEN,
     });
-
-    return NextResponse.json(jsonResponse);
+    return NextResponse.json({ url: blob.url });
   } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error).message },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
 }
