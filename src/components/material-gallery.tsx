@@ -1,9 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { UploadSimple, Trash, ImageSquare, Plus } from "@phosphor-icons/react";
+import {
+  UploadSimple,
+  Trash,
+  ImageSquare,
+  Plus,
+  CaretLeft,
+  CaretRight,
+} from "@phosphor-icons/react";
 import { uploadViaServer } from "@/lib/blob-upload";
 import {
   compressAndUploadVideoProxy,
@@ -14,9 +21,9 @@ import { addMaterialAction, removeMaterialAction } from "@/app/(app)/contenuti/a
 export type GalleryImage = { id: string; url: string };
 
 /**
- * Galleria foto per la tab "Materiali": post singolo (1 foto) o carosello (N foto).
- * Nello stato vuoto accetta anche un video (→ diventa modalità reel, gestita dal
- * genitore tramite VideoReview).
+ * Galleria foto per la tab "Materiali": post singolo (1 foto) o carosello (N foto)
+ * scorribile orizzontalmente (swipe / frecce / dots). Nello stato vuoto accetta
+ * anche un video (→ modalità reel, gestita dal genitore via VideoReview).
  */
 export function MaterialGallery({
   contentId,
@@ -28,10 +35,23 @@ export function MaterialGallery({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
-  const [selected, setSelected] = useState(0);
+  const [active, setActive] = useState(0);
+  const scrollerRef = useRef<HTMLDivElement>(null);
 
   const empty = images.length === 0;
-  const main = images[Math.min(selected, images.length - 1)];
+  const activeClamped = Math.min(active, Math.max(0, images.length - 1));
+
+  function onScroll() {
+    const el = scrollerRef.current;
+    if (!el || el.clientWidth === 0) return;
+    setActive(Math.round(el.scrollLeft / el.clientWidth));
+  }
+
+  function goTo(i: number) {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+  }
 
   async function addImages(files: File[]) {
     setBusy(true);
@@ -99,7 +119,7 @@ export function MaterialGallery({
   async function remove(id: string) {
     await removeMaterialAction(id, contentId);
     toast.success("Materiale rimosso");
-    setSelected(0);
+    setActive(0);
     router.refresh();
   }
 
@@ -133,41 +153,78 @@ export function MaterialGallery({
         </div>
       ) : (
         <div className="space-y-3">
-          {/* Foto principale */}
-          <div className="group/main relative overflow-hidden rounded-2xl border border-border bg-ink/5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={main.url}
-              alt=""
-              className="max-h-72 w-full object-contain"
-            />
-            <button
-              aria-label="Rimuovi foto"
-              onClick={() => remove(main.id)}
-              className="absolute right-2 top-2 rounded-full bg-paper/90 p-1.5 text-ink/70 opacity-0 shadow transition-opacity hover:text-coral-ink group-hover/main:opacity-100"
+          {/* Carosello scorribile */}
+          <div className="relative">
+            <div
+              ref={scrollerRef}
+              onScroll={onScroll}
+              className="flex snap-x snap-mandatory overflow-x-auto rounded-2xl border border-border bg-ink/5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
-              <Trash size={14} />
-            </button>
+              {images.map((m) => (
+                <div
+                  key={m.id}
+                  className="group/slide relative w-full shrink-0 snap-center"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={m.url}
+                    alt=""
+                    className="mx-auto max-h-72 w-full object-contain"
+                  />
+                  <button
+                    aria-label="Rimuovi foto"
+                    onClick={() => remove(m.id)}
+                    className="absolute right-2 top-2 rounded-full bg-paper/90 p-1.5 text-ink/70 shadow transition-opacity hover:text-coral-ink sm:opacity-0 sm:group-hover/slide:opacity-100"
+                  >
+                    <Trash size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {images.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Precedente"
+                  onClick={() => goTo(Math.max(0, activeClamped - 1))}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-paper/90 p-1.5 text-ink shadow hover:bg-paper disabled:opacity-30"
+                  disabled={activeClamped === 0}
+                >
+                  <CaretLeft size={16} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Successivo"
+                  onClick={() => goTo(Math.min(images.length - 1, activeClamped + 1))}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-paper/90 p-1.5 text-ink shadow hover:bg-paper disabled:opacity-30"
+                  disabled={activeClamped === images.length - 1}
+                >
+                  <CaretRight size={16} />
+                </button>
+              </>
+            )}
           </div>
 
-          {/* Striscia miniature (carosello) */}
+          {/* Dots + contatore */}
           {images.length > 1 && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex items-center justify-center gap-1.5">
               {images.map((m, i) => (
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => setSelected(i)}
-                  className={`relative h-14 w-14 overflow-hidden rounded-lg border ${
-                    i === Math.min(selected, images.length - 1)
-                      ? "border-ink"
-                      : "border-border"
+                  aria-label={`Vai alla foto ${i + 1}`}
+                  onClick={() => goTo(i)}
+                  className={`h-1.5 rounded-full transition-all ${
+                    i === activeClamped
+                      ? "w-4 bg-ink"
+                      : "w-1.5 bg-ink/25 hover:bg-ink/40"
                   }`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={m.url} alt="" className="h-full w-full object-cover" />
-                </button>
+                />
               ))}
+              <span className="ml-2 text-[11px] tabular-nums text-muted-foreground">
+                {activeClamped + 1}/{images.length}
+              </span>
             </div>
           )}
 
