@@ -71,8 +71,10 @@ export async function compressToProxy(
   const url = URL.createObjectURL(file);
   const video = document.createElement("video");
   video.src = url;
-  // NB: non mutiamo l'elemento, altrimenti l'audio catturato sarebbe silenzioso.
-  // Lo instradiamo via WebAudio verso uno stream (catturato ma non riprodotto).
+  // Muto l'elemento: senza mute la autoplay policy blocca video.play() e la
+  // compressione si pianta. L'audio viene comunque catturato via WebAudio:
+  // createMediaElementSource intercetta la traccia decodificata a monte del mute.
+  video.muted = true;
   video.playsInline = true;
   // Required to read frames from a local file without tainting the canvas.
   video.crossOrigin = "anonymous";

@@ -202,7 +202,7 @@ export function VideoReview({
           {/* Replace proxy */}
           <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-ink">
             <UploadSimple size={14} />
-            Sostituisci il proxy
+            Sostituisci il video
             <input
               type="file"
               accept="video/*"
