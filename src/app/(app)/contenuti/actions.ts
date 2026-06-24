@@ -14,6 +14,9 @@ import {
   updateContent,
   deleteContent,
   deleteComment,
+  addMaterial,
+  removeMaterial,
+  reorderMaterials,
 } from "@/lib/content";
 import {
   createClass,
@@ -117,6 +120,44 @@ export async function setVideoProxyAction(formData: FormData) {
   const url = String(formData.get("videoProxyUrl") ?? "").trim() || null;
   if (!contentId || !url) return;
   await setContentVideoProxy(ctx.workspaceId, contentId, url);
+  revalidatePath(`/contenuti/${contentId}`);
+  revalidatePath("/contenuti");
+}
+
+/** Materiali — aggiungi un materiale (foto o video) già caricato su Blob. */
+export async function addMaterialAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) throw new Error("Non autorizzato");
+  const contentId = String(formData.get("contentId") ?? "");
+  const kind = String(formData.get("kind") ?? "");
+  const url = String(formData.get("url") ?? "").trim();
+  if (!contentId || !url || (kind !== "image" && kind !== "video")) {
+    throw new Error("Dati materiale non validi");
+  }
+  await addMaterial(ctx.workspaceId, contentId, kind, url);
+  revalidatePath(`/contenuti/${contentId}`);
+  revalidatePath("/contenuti");
+}
+
+/** Materiali — rimuovi un materiale. */
+export async function removeMaterialAction(materialId: string, contentId: string) {
+  const ctx = await currentContext();
+  if (!ctx) throw new Error("Non autorizzato");
+  await removeMaterial(ctx.workspaceId, materialId);
+  revalidatePath(`/contenuti/${contentId}`);
+  revalidatePath("/contenuti");
+}
+
+/** Materiali — riordina (orderedIds separati da virgola). */
+export async function reorderMaterialsAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) throw new Error("Non autorizzato");
+  const contentId = String(formData.get("contentId") ?? "");
+  const ids = String(formData.get("orderedIds") ?? "")
+    .split(",")
+    .filter(Boolean);
+  if (!contentId || ids.length === 0) return;
+  await reorderMaterials(ctx.workspaceId, contentId, ids);
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
 }

@@ -7,6 +7,7 @@ import {
   ContentModal,
   type ModalContent,
   type ModalComment,
+  type ModalMaterial,
 } from "@/components/content-modal";
 
 export default async function ContentModalPage({
@@ -69,7 +70,19 @@ export default async function ContentModalPage({
     audioUrl: cm.audioUrl ?? null,
   }));
 
+  const materials: ModalMaterial[] = c.materials.map((m) => ({
+    id: m.id,
+    kind: m.kind as "image" | "video",
+    url: m.url,
+    order: m.order,
+  }));
+
   return (
-    <ContentModal content={content} comments={comments} allClasses={allClasses} />
+    <ContentModal
+      content={content}
+      comments={comments}
+      materials={materials}
+      allClasses={allClasses}
+    />
   );
 }

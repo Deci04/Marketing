@@ -9,13 +9,12 @@ import {
   InstagramLogo,
   YoutubeLogo,
   PaperPlaneTilt,
-  UploadSimple,
   PencilSimple,
   Trash,
+  LinkSimple,
 } from "@phosphor-icons/react";
 import {
   addCommentAction,
-  setThumbnailAction,
   updateContentAction,
   deleteContentAction,
   deleteCommentAction,
@@ -23,11 +22,15 @@ import {
 import { updatePerformanceAction } from "@/app/(app)/kpi/actions";
 import { FORMAT_ORDER, FORMAT_LABELS, FORMAT_CHIP } from "@/lib/format";
 import { classChip } from "@/lib/classes";
+import { galleryMode, sortByOrder } from "@/lib/materials";
 import { ClassSelect, type SelectableClass } from "@/components/class-select";
 import { VideoReview, type ReviewComment } from "@/components/video-review";
+import { MaterialGallery } from "@/components/material-gallery";
 import { AudioRecorder } from "@/components/audio-recorder";
 import { AudioComment } from "@/components/audio-comment";
 import type { ContentFormat } from "@prisma/client";
+
+export type ModalMaterial = { id: string; kind: "image" | "video"; url: string; order: number };
 
 export type ModalClass = { id: string; name: string; color: string | null };
 
@@ -73,7 +76,7 @@ const STATUS: Record<string, string> = {
   Pubblicato: "bg-sage text-sage-ink",
 };
 
-const TABS = ["Panoramica", "Video", "Performance", "Materiali e commenti"] as const;
+const TABS = ["Panoramica", "Materiali", "Performance"] as const;
 type Tab = (typeof TABS)[number];
 
 function PerfField({
@@ -114,10 +117,12 @@ function fmtDate(iso: string | null) {
 export function ContentModal({
   content,
   comments,
+  materials,
   allClasses,
 }: {
   content: ModalContent;
   comments: ModalComment[];
+  materials: ModalMaterial[];
   allClasses: SelectableClass[];
 }) {
   const router = useRouter();
@@ -135,6 +140,24 @@ export function ContentModal({
   const isYt = content.channel === "YOUTUBE";
   const Logo = isYt ? YoutubeLogo : InstagramLogo;
   const channelInk = isYt ? "text-coral-ink" : "text-blush-ink";
+
+  // Materiali unificati: la modalità (galleria foto vs reel) si deduce dai materiali.
+  const sortedMaterials = sortByOrder(materials);
+  const materialsMode = galleryMode(sortedMaterials);
+  const videoMaterial = sortedMaterials.find((m) => m.kind === "video") ?? null;
+  const imageMaterials = sortedMaterials
+    .filter((m) => m.kind === "image")
+    .map((m) => ({ id: m.id, url: m.url }));
+  const reviewComments = comments.map(
+    (c): ReviewComment => ({
+      id: c.id,
+      body: c.body,
+      author: c.author,
+      createdAt: c.createdAt,
+      videoTimestamp: c.videoTimestamp,
+      audioUrl: c.audioUrl,
+    })
+  );
 
   return (
     <AnimatePresence>
@@ -188,7 +211,7 @@ export function ContentModal({
                   }`}
                 >
                   {t}
-                  {t === "Materiali e commenti" && comments.length > 0 && (
+                  {t === "Materiali" && comments.length > 0 && (
                     <span className="ml-1 text-xs opacity-70">({comments.length})</span>
                   )}
                 </button>
@@ -363,24 +386,6 @@ export function ContentModal({
                 </div>
               )}
 
-              {tab === "Video" && (
-                <VideoReview
-                  contentId={content.id}
-                  videoProxyUrl={content.videoProxyUrl}
-                  masterLink={content.masterLink}
-                  comments={comments.map(
-                    (c): ReviewComment => ({
-                      id: c.id,
-                      body: c.body,
-                      author: c.author,
-                      createdAt: c.createdAt,
-                      videoTimestamp: c.videoTimestamp,
-                      audioUrl: c.audioUrl,
-                    })
-                  )}
-                />
-              )}
-
               {tab === "Performance" && (
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-border bg-card p-4">
@@ -428,60 +433,35 @@ export function ContentModal({
                 </div>
               )}
 
-              {tab === "Materiali e commenti" && (
+              {tab === "Materiali" && materialsMode === "video" && videoMaterial && (
+                <VideoReview
+                  contentId={content.id}
+                  videoUrl={videoMaterial.url}
+                  videoMaterialId={videoMaterial.id}
+                  masterLink={content.masterLink}
+                  comments={reviewComments}
+                />
+              )}
+
+              {tab === "Materiali" && materialsMode !== "video" && (
                 <div className="space-y-6">
-                  <section className="space-y-4">
-                    <h3 className="text-sm font-medium text-muted-foreground">Materiale</h3>
-                    {content.thumbnailUrl && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={content.thumbnailUrl}
-                        alt=""
-                        className="max-h-56 w-full rounded-2xl border border-border object-cover"
-                      />
-                    )}
-                    <form
-                      action={async (fd) => {
-                        await setThumbnailAction(fd);
-                        toast.success("Anteprima aggiornata");
-                      }}
-                      className="space-y-3"
+                  <MaterialGallery contentId={content.id} images={imageMaterials} />
+
+                  {content.materialsUrl && (
+                    <a
+                      href={content.materialsUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-blush-ink underline"
                     >
-                      <input type="hidden" name="contentId" value={content.id} />
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <UploadSimple size={16} />
-                        <input
-                          type="file"
-                          name="file"
-                          accept="image/*"
-                          className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-full file:border-0 file:bg-ink file:px-3 file:py-1.5 file:text-paper"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <input
-                          name="thumbnailUrl"
-                          placeholder="…o incolla un URL immagine"
-                          className="flex-1 rounded-[12px] border border-border bg-secondary/70 px-3.5 py-2.5 text-sm outline-none focus:border-ink/30 focus:bg-paper"
-                        />
-                        <button className="rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground">
-                          Salva
-                        </button>
-                      </div>
-                    </form>
-                    {content.materialsUrl && (
-                      <a href={content.materialsUrl} className="inline-block text-sm text-blush-ink underline">
-                        Apri link materiali ↗
-                      </a>
-                    )}
-                  </section>
+                      <LinkSimple size={13} /> Apri link materiali ↗
+                    </a>
+                  )}
 
                   <section className="space-y-4 border-t border-border pt-5">
                     <h3 className="text-sm font-medium text-muted-foreground">
                       Commenti{comments.length > 0 ? ` (${comments.length})` : ""}
                     </h3>
-                    <p className="-mt-2 text-xs text-muted-foreground">
-                      Per ancorare i commenti al minutaggio usa la tab <span className="font-medium">Video</span>.
-                    </p>
                     <div className="space-y-3">
                       {comments.length === 0 && (
                         <p className="text-sm text-muted-foreground">Ancora nessun commento.</p>

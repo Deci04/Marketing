@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { uploadViaServer } from "@/lib/blob-upload";
 import { toast } from "sonner";
 import {
   FilmSlate,
@@ -15,14 +14,15 @@ import {
 } from "@phosphor-icons/react";
 import {
   addCommentAction,
-  setVideoProxyAction,
+  addMaterialAction,
+  removeMaterialAction,
   setMasterLinkAction,
   deleteCommentAction,
 } from "@/app/(app)/contenuti/actions";
 import {
-  compressToProxy,
-  isCompressionSupported,
-} from "@/lib/video-compress";
+  compressAndUploadVideoProxy,
+  VideoTooLargeError,
+} from "@/lib/video-upload-client";
 import {
   formatTimestamp,
   markerPercent,
@@ -40,17 +40,17 @@ export type ReviewComment = {
   audioUrl: string | null;
 };
 
-// If the browser can't compress, fall back to uploading the original with a cap.
-const FALLBACK_MAX_BYTES = 50 * 1024 * 1024;
-
 export function VideoReview({
   contentId,
-  videoProxyUrl,
+  videoUrl,
+  videoMaterialId,
   masterLink,
   comments,
 }: {
   contentId: string;
-  videoProxyUrl: string | null;
+  videoUrl: string | null;
+  /** Id del Material video (per la sostituzione: rimuovi + aggiungi). */
+  videoMaterialId?: string | null;
   masterLink: string | null;
   comments: ReviewComment[];
 }) {
@@ -78,53 +78,62 @@ export function VideoReview({
     v.play().catch(() => {});
   }
 
+  // I WebM prodotti da MediaRecorder spesso non espongono la durata (Infinity)
+  // finché non si cerca fino alla fine: forziamo il calcolo, poi torniamo a 0.
+  function handleLoadedMetadata(e: React.SyntheticEvent<HTMLVideoElement>) {
+    const v = e.currentTarget;
+    if (Number.isFinite(v.duration) && v.duration > 0) {
+      setDuration(v.duration);
+      return;
+    }
+    const onUpdate = () => {
+      if (Number.isFinite(v.duration) && v.duration > 0) {
+        v.removeEventListener("timeupdate", onUpdate);
+        v.currentTime = 0;
+        setDuration(v.duration);
+      }
+    };
+    v.addEventListener("timeupdate", onUpdate);
+    v.currentTime = 1e7;
+  }
+
+  // Click sulla timeline → seek alla frazione corrispondente.
+  function onTimelineSeek(e: React.MouseEvent<HTMLDivElement>) {
+    const v = videoRef.current;
+    if (!v || !Number.isFinite(duration) || duration <= 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    v.currentTime = frac * duration;
+    setCurrent(frac * duration);
+  }
+
   async function handleFile(file: File) {
     if (busy) return;
     setBusy(true);
     setProgress(0);
     try {
-      let toUpload: Blob;
-      let filename: string;
-      let contentType: string;
-
-      if (isCompressionSupported()) {
-        toast.info("Compressione del proxy in corso…");
-        const res = await compressToProxy(file, (r) => setProgress(r));
-        toUpload = res.blob;
-        filename = res.filename;
-        contentType = res.mimeType;
-      } else {
-        // Documented fallback: no client compression → upload original, capped.
-        if (file.size > FALLBACK_MAX_BYTES) {
-          toast.error(
-            "Compressione non supportata dal browser e file troppo grande (max 50MB). Carica una clip più leggera."
-          );
-          return;
-        }
-        toast.warning(
-          "Compressione non supportata: carico il file originale (sotto i 50MB)."
-        );
-        toUpload = file;
-        filename = file.name;
-        contentType = file.type || "video/mp4";
-      }
-
-      setProgress(null); // upload phase
-      const proxyFile = new File([toUpload], filename, { type: contentType });
-      const blob = await uploadViaServer(
-        proxyFile,
-        `video-proxies/${contentId}`,
-        filename
+      const blob = await compressAndUploadVideoProxy(file, contentId, (r) =>
+        setProgress(r)
       );
 
+      // Sostituzione: rimuovi il vecchio video prima di aggiungere il nuovo
+      // (un contenuto = un solo video).
+      if (videoMaterialId) {
+        await removeMaterialAction(videoMaterialId, contentId);
+      }
       const fd = new FormData();
       fd.set("contentId", contentId);
-      fd.set("videoProxyUrl", blob.url);
-      await setVideoProxyAction(fd);
-      toast.success("Proxy caricato");
+      fd.set("kind", "video");
+      fd.set("url", blob.url);
+      await addMaterialAction(fd);
+      toast.success("Video caricato");
       router.refresh();
     } catch (err) {
-      toast.error(`Upload fallito: ${(err as Error).message}`);
+      if (err instanceof VideoTooLargeError) {
+        toast.error(err.message);
+      } else {
+        toast.error(`Upload fallito: ${(err as Error).message}`);
+      }
     } finally {
       setBusy(false);
       setProgress(null);
@@ -133,22 +142,29 @@ export function VideoReview({
 
   return (
     <div className="space-y-5">
-      {videoProxyUrl ? (
+      {videoUrl ? (
         <div className="space-y-3">
           <div className="overflow-hidden rounded-2xl border border-border bg-ink/5">
             <video
               ref={videoRef}
-              src={videoProxyUrl}
+              src={videoUrl}
               controls
               className="w-full bg-black"
-              onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+              onLoadedMetadata={handleLoadedMetadata}
+              onDurationChange={(e) => {
+                const d = e.currentTarget.duration;
+                if (Number.isFinite(d) && d > 0) setDuration(d);
+              }}
               onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime || 0)}
             />
           </div>
 
           {/* Stylized timeline with comment markers */}
           <div className="px-1">
-            <div className="relative h-9">
+            <div
+              className="relative h-9 cursor-pointer"
+              onClick={onTimelineSeek}
+            >
               <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-secondary" />
               {/* played portion */}
               <div
@@ -166,7 +182,10 @@ export function VideoReview({
                   key={c.id}
                   type="button"
                   title={`${formatTimestamp(c.videoTimestamp)} — ${c.author}`}
-                  onClick={() => seekTo(c.videoTimestamp ?? 0)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    seekTo(c.videoTimestamp ?? 0);
+                  }}
                   style={{ left: `${markerPercent(c.videoTimestamp, duration)}%` }}
                   className="absolute top-1/2 z-20 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-blush text-blush-ink shadow-sm ring-1 ring-blush-ink/20 transition-transform hover:scale-110"
                 >
@@ -183,7 +202,7 @@ export function VideoReview({
           {/* Replace proxy */}
           <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-ink">
             <UploadSimple size={14} />
-            Sostituisci il proxy
+            Sostituisci il video
             <input
               type="file"
               accept="video/*"
@@ -326,7 +345,7 @@ export function VideoReview({
             await addCommentAction(fd);
             setBody("");
             toast.success(
-              videoProxyUrl
+              videoUrl
                 ? `Commento aggiunto a ${formatTimestamp(current)}`
                 : "Commento aggiunto"
             );
@@ -338,14 +357,14 @@ export function VideoReview({
           <input
             type="hidden"
             name="videoTimestamp"
-            value={videoProxyUrl ? Math.floor(current) : ""}
+            value={videoUrl ? Math.floor(current) : ""}
           />
           <input
             name="body"
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder={
-              videoProxyUrl
+              videoUrl
                 ? `Commenta a ${formatTimestamp(current)}…`
                 : "Scrivi un commento…"
             }
@@ -362,14 +381,14 @@ export function VideoReview({
         {/* Voice note, anchored to the current second when a proxy is loaded */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">
-            {videoProxyUrl
+            {videoUrl
               ? `Vocale ancorato a ${formatTimestamp(current)}:`
               : "Vocale:"}
           </span>
           <AudioRecorder
             contentId={contentId}
             getTimestamp={
-              videoProxyUrl ? () => currentRef.current : undefined
+              videoUrl ? () => currentRef.current : undefined
             }
           />
         </div>
