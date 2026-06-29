@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { currentContext } from "@/lib/current";
-import { listContents, listRecentContent } from "@/lib/content";
+import { listContents } from "@/lib/content";
 import { countValueConversations } from "@/lib/kpi";
-import { deriveStatus } from "@/lib/status";
+import { workflowState } from "@/lib/workflow";
 import { HomeIllustration } from "@/components/home-illustration";
 import {
   ArrowRight,
@@ -16,24 +16,12 @@ import {
 const fmtLong = (d: Date) =>
   d.toLocaleDateString("it-IT", { day: "numeric", month: "long" });
 
-const relTime = (d: Date) => {
-  const s = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (s < 60) return "ora";
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m} min fa`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h} h fa`;
-  const days = Math.floor(h / 24);
-  return days === 1 ? "ieri" : `${days} g fa`;
-};
-
 export default async function HomePage() {
   const ctx = await currentContext();
   if (!ctx) return null;
-  const [contents, vcCount, recent] = await Promise.all([
+  const [contents, vcCount] = await Promise.all([
     listContents(ctx.workspaceId),
     countValueConversations(ctx.workspaceId),
-    listRecentContent(ctx.workspaceId, 5),
   ]);
 
   const now = Date.now();
@@ -41,6 +29,18 @@ export default async function HomePage() {
     .filter((c) => c.publishAt && c.publishAt.getTime() >= now)
     .sort((a, b) => a.publishAt!.getTime() - b.publishAt!.getTime());
   const next = upcoming[0] ?? null;
+
+  // "Da fare adesso": contents that still need an action in the Matteo↔Luca loop.
+  const todo = contents
+    .map((c) => ({
+      c,
+      wf: workflowState({
+        deliveredAt: c.deliveredAt,
+        confirmedAt: c.confirmedAt,
+        hasMontato: c.videoProxyUrl != null || c._count.materials > 0,
+      }),
+    }))
+    .filter(({ wf }) => wf === "Da revisionare" || wf === "Da confermare");
   // Prefer the display name; otherwise fall back to the email's local part (drop
   // the @domain) so we never greet with a raw address. (Seed should set a real name.)
   const base = (ctx.user.name?.trim() || ctx.user.email?.split("@")[0] || "").split(" ")[0];
@@ -106,22 +106,21 @@ export default async function HomePage() {
       </div>
 
       <div>
-        <h2 className="mb-3 text-lg">Novità</h2>
-        {recent.length === 0 ? (
+        <h2 className="mb-3 text-lg">Da fare adesso</h2>
+        {todo.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center text-sm text-muted-foreground">
-            Nessuna novità recente.
+            Tutto in pari ✨
           </div>
         ) : (
           <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
-            {recent.map((c) => {
+            {todo.map(({ c, wf }) => {
               const isYt = c.channel === "YOUTUBE";
               const Logo = isYt ? YoutubeLogo : InstagramLogo;
               const ink = isYt ? "text-coral-ink" : "text-blush-ink";
-              const status = deriveStatus({
-                publishAt: c.publishAt,
-                lucaDeliveryAt: c.block?.lucaDeliveryAt ?? null,
-                matteoDeliveryAt: c.block?.matteoDeliveryAt ?? null,
-              });
+              const tone =
+                wf === "Da revisionare"
+                  ? "bg-butter text-butter-ink"
+                  : "bg-lavender text-lavender-ink";
               return (
                 <Link
                   key={c.id}
@@ -134,11 +133,8 @@ export default async function HomePage() {
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
                     {c.title}
                   </span>
-                  <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">
-                    {status}
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {relTime(c.createdAt)}
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${tone}`}>
+                    {wf}
                   </span>
                   <ArrowRight size={14} className="shrink-0 text-muted-foreground" />
                 </Link>
