@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { currentContext } from "@/lib/current";
 import { listContents } from "@/lib/content";
-import { getKpiOverview } from "@/lib/kpi";
+import { countValueConversations } from "@/lib/kpi";
 import { HomeIllustration } from "@/components/home-illustration";
 import {
   ArrowRight,
@@ -18,9 +18,9 @@ const fmtLong = (d: Date) =>
 export default async function HomePage() {
   const ctx = await currentContext();
   if (!ctx) return null;
-  const [contents, kpi] = await Promise.all([
+  const [contents, vcCount] = await Promise.all([
     listContents(ctx.workspaceId),
-    getKpiOverview(ctx.workspaceId),
+    countValueConversations(ctx.workspaceId),
   ]);
 
   const now = Date.now();
@@ -85,7 +85,7 @@ export default async function HomePage() {
             <span className="text-xs">Conversazioni di valore</span>
             <ChatCircleDots size={18} weight="fill" />
           </div>
-          <div className="mt-1 text-3xl font-semibold text-blush-ink">{kpi.vc.length}</div>
+          <div className="mt-1 text-3xl font-semibold text-blush-ink">{vcCount}</div>
         </Link>
       </div>
 

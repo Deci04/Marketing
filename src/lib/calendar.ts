@@ -118,7 +118,16 @@ export async function getMonthItems(
   const end = new Date(Date.UTC(year, month + 1, 1));
   const items: BoardItem[] = [];
 
-  const blocks = await db.block.findMany({ where: scopedWhere(workspaceId) });
+  // Only blocks with a delivery deadline in this month can contribute items here
+  // (the in-loop checks still guard correctness). Avoids loading the whole table.
+  const blocks = await db.block.findMany({
+    where: scopedWhere(workspaceId, {
+      OR: [
+        { lucaDeliveryAt: { gte: start, lt: end } },
+        { matteoDeliveryAt: { gte: start, lt: end } },
+      ],
+    }),
+  });
   for (const b of blocks) {
     if (b.lucaDeliveryAt && b.lucaDeliveryAt >= start && b.lucaDeliveryAt < end) {
       items.push({ refType: "luca", refId: b.id, date: b.lucaDeliveryAt, label: `Luca · ${b.label}`, owner: "Luca", channel: null, href: null });
