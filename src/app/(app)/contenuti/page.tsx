@@ -86,6 +86,22 @@ export default async function ContenutiPage({
   const n = contents.length;
   const subtitle = `${n} ${n === 1 ? "contenuto" : "contenuti"} · ${pipeline} in lavorazione`;
 
+  // Group contents by publication month ("Senza data" first, then chronological).
+  type Group = { key: string; label: string; sort: number; items: typeof contents };
+  const groupMap = new Map<string, Group>();
+  for (const c of contents) {
+    const d = c.publishAt;
+    const key = d ? `${d.getUTCFullYear()}-${d.getUTCMonth()}` : "none";
+    const label = d
+      ? d.toLocaleDateString("it-IT", { month: "long", year: "numeric", timeZone: "UTC" })
+      : "Senza data";
+    const sort = d ? d.getUTCFullYear() * 12 + d.getUTCMonth() : -1;
+    if (!groupMap.has(key)) groupMap.set(key, { key, label, sort, items: [] });
+    groupMap.get(key)!.items.push(c);
+  }
+  const groups = [...groupMap.values()].sort((a, b) => a.sort - b.sort);
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -215,9 +231,21 @@ export default async function ContenutiPage({
               : "Nessun contenuto ancora. Premi Nuovo per crearne uno."}
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {contents.map((c) => (
-              <ContentCard key={c.id} content={c} />
+          <div className="space-y-6">
+            {groups.map((g) => (
+              <div key={g.key} className="space-y-3">
+                <div className="flex items-baseline gap-2">
+                  <h3 className="text-sm font-medium text-ink">{cap(g.label)}</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {g.items.length}
+                  </span>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {g.items.map((c) => (
+                    <ContentCard key={c.id} content={c} />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         )}
