@@ -43,6 +43,9 @@ export default async function ContentModalPage({
     materialsUrl: c.materialsUrl ?? null,
     videoProxyUrl: c.videoProxyUrl ?? null,
     masterLink: c.masterLink ?? null,
+    deliveredAt: c.deliveredAt ? c.deliveredAt.toISOString() : null,
+    confirmedAt: c.confirmedAt ? c.confirmedAt.toISOString() : null,
+    hasMontato: c.videoProxyUrl != null || c.materials.length > 0,
     block: c.block
       ? {
           label: c.block.label,

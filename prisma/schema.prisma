@@ -13,6 +13,27 @@ enum Role {
   COLLABORATOR
 }
 
+enum ActivityType {
+  DELIVERED // Luca ha consegnato il materiale
+  REVIEW_READY // Matteo ha caricato il montato → da confermare
+  CONFIRMED // Luca ha confermato
+  COMMENT // nuovo commento (testo/audio)
+  CREATED // nuovo contenuto creato
+}
+
+model Activity {
+  id          String       @id @default(cuid())
+  workspaceId String
+  type        ActivityType
+  contentId   String?
+  actorId     String? // chi ha generato l'evento (per non auto-notificarsi)
+  createdAt   DateTime     @default(now())
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  content     Content?     @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+}
+
 model Workspace {
   id          String       @id @default(cuid())
   name        String
@@ -31,6 +52,7 @@ model Workspace {
   contentClasses     ContentClass[]
   chatThreads        ChatThread[]
   chatMessages       ChatMessage[]
+  activities         Activity[]
 }
 
 model User {
@@ -40,6 +62,7 @@ model User {
   image       String?
   isAdmin     Boolean      @default(false)
   createdAt   DateTime     @default(now())
+  notificationsSeenAt DateTime? // ultimo momento in cui ha aperto il feed notifiche
   memberships Membership[]
   accounts    Account[]
   sessions    Session[]
@@ -151,6 +174,8 @@ model Content {
   publishAt        DateTime?
   hook             String?
   notes            String?
+  deliveredAt      DateTime? // Luca ha segnato "materiale consegnato"
+  confirmedAt      DateTime? // Luca ha confermato il montato
   materialsUrl     String?
   thumbnailUrl     String?
   videoProxyUrl    String? // proxy compresso di review su Blob
@@ -171,6 +196,7 @@ model Content {
   snapshots        MetricSnapshot[]
   classes          ContentClass[]
   materials        Material[]
+  activities       Activity[]
 
   @@index([workspaceId])
   @@index([blockId])

@@ -2,7 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentContext, currentUser } from "@/lib/current";
 import { signOut } from "@/lib/auth";
+import { unreadCount } from "@/lib/activity";
 import { SidebarNav } from "@/components/sidebar-nav";
+import { NotificationBell } from "@/components/notification-bell";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { NoWorkspace } from "@/components/no-workspace";
 import { SignOut } from "@phosphor-icons/react/dist/ssr";
@@ -23,6 +25,11 @@ export default async function AppLayout({
   const name = ctx.user.name ?? ctx.user.email ?? "—";
   const initials = name.slice(0, 1).toUpperCase();
   const wsInitial = (ctx?.workspace.name ?? "L").slice(0, 1);
+  const unread = await unreadCount(
+    ctx.workspaceId,
+    ctx.user.id,
+    ctx.user.notificationsSeenAt ?? null
+  );
 
   return (
     <div className="flex min-h-screen gap-2 p-3">
@@ -38,6 +45,7 @@ export default async function AppLayout({
           <SidebarNav />
 
           <div className="mt-auto flex flex-col gap-2">
+            <NotificationBell count={unread} />
             <Link
               href="/profilo"
               title={`${name} — profilo e spazi`}

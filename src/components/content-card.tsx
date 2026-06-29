@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { deriveStatus, type DerivedStatus } from "@/lib/status";
+import { workflowState } from "@/lib/workflow";
 import { FORMAT_CHIP, formatLabel } from "@/lib/format";
 import { classChip } from "@/lib/classes";
 import { InstagramLogo, YoutubeLogo } from "@phosphor-icons/react/dist/ssr";
@@ -13,6 +14,10 @@ type CardContent = {
   publishAt: Date | null;
   hook: string | null;
   thumbnailUrl: string | null;
+  deliveredAt?: Date | null;
+  confirmedAt?: Date | null;
+  videoProxyUrl?: string | null;
+  _count?: { materials: number };
   classes?: { id: string; name: string; color: string | null }[];
   block: {
     label: string;
@@ -40,6 +45,18 @@ export function ContentCard({ content }: { content: CardContent }) {
   const channelInk = isYt ? "text-coral-ink" : "text-blush-ink";
   const fmt = formatLabel(content.format);
   const classes = content.classes ?? [];
+  const wf = workflowState({
+    deliveredAt: content.deliveredAt ?? null,
+    confirmedAt: content.confirmedAt ?? null,
+    hasMontato: content.videoProxyUrl != null || (content._count?.materials ?? 0) > 0,
+  });
+  // Show a small "needs action" chip only when something is pending.
+  const wfChip =
+    wf === "Da revisionare"
+      ? "bg-butter text-butter-ink"
+      : wf === "Da confermare"
+        ? "bg-lavender text-lavender-ink"
+        : null;
 
   return (
     <Link
@@ -83,6 +100,11 @@ export function ContentCard({ content }: { content: CardContent }) {
         <div className="mt-1.5 text-[15px] font-semibold leading-snug text-ink">
           {content.title}
         </div>
+        {wfChip && (
+          <span className={`mt-1.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${wfChip}`}>
+            {wf}
+          </span>
+        )}
         {content.publishAt && (
           <p className="mt-1.5 text-xs text-muted-foreground">
             {content.publishAt.toLocaleDateString("it-IT", {

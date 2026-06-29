@@ -10,7 +10,7 @@ export async function listContents(
 ) {
   return db.content.findMany({
     where: filtersToWhere(workspaceId, filters),
-    include: { block: true, classes: true },
+    include: { block: true, classes: true, _count: { select: { materials: true } } },
     orderBy: [{ publishAt: "asc" }, { createdAt: "desc" }],
   });
 }
@@ -187,6 +187,52 @@ export async function deleteContent(workspaceId: string, id: string) {
   if (!c) return null;
   await db.comment.deleteMany({ where: { contentId: id } });
   return db.content.delete({ where: { id } });
+}
+
+// --- Collaboration lifecycle (Matteo ↔ Luca) ---
+
+/** Luca marks the material as delivered (+ optional external Drive/iCloud link). */
+export async function setDelivered(
+  workspaceId: string,
+  id: string,
+  link?: string | null
+) {
+  const c = await db.content.findFirst({
+    where: scopedWhere(workspaceId, { id }),
+    select: { id: true },
+  });
+  if (!c) return null;
+  return db.content.update({
+    where: { id },
+    data: { deliveredAt: new Date(), ...(link ? { masterLink: link } : {}) },
+  });
+}
+
+/** Luca confirms the montato. */
+export async function setConfirmed(workspaceId: string, id: string) {
+  const c = await db.content.findFirst({
+    where: scopedWhere(workspaceId, { id }),
+    select: { id: true },
+  });
+  if (!c) return null;
+  return db.content.update({ where: { id }, data: { confirmedAt: new Date() } });
+}
+
+/** True if a "montato" exists: a review proxy or at least one material. */
+export async function contentHasMontato(workspaceId: string, id: string) {
+  const c = await db.content.findFirst({
+    where: scopedWhere(workspaceId, { id }),
+    select: { videoProxyUrl: true, _count: { select: { materials: true } } },
+  });
+  if (!c) return false;
+  return c.videoProxyUrl != null || c._count.materials > 0;
+}
+
+export async function setNotificationsSeen(userId: string) {
+  return db.user.update({
+    where: { id: userId },
+    data: { notificationsSeenAt: new Date() },
+  });
 }
 
 export async function setContentThumbnail(

@@ -12,6 +12,7 @@ import {
   type BoardItemRef,
 } from "@/lib/calendar";
 import { createContent, listContents } from "@/lib/content";
+import { createActivity } from "@/lib/activity";
 import { parseFormat, FORMAT_LABELS } from "@/lib/format";
 import { nextTitleForFormat, nextNumericTitle } from "@/lib/content-title";
 import type { Channel } from "@prisma/client";
@@ -74,14 +75,20 @@ export async function addContentAction(formData: FormData) {
     const titles = existing.map((c) => c.title);
     title = format ? nextTitleForFormat(titles, FORMAT_LABELS[format]) : nextNumericTitle(titles);
   }
-  await createContent(ctx.workspaceId, {
+  const created = await createContent(ctx.workspaceId, {
     title,
     channel,
     format,
     publishAt: toUtc(ymd),
   });
+  await createActivity(ctx.workspaceId, {
+    type: "CREATED",
+    contentId: created.id,
+    actorId: ctx.user.id,
+  });
   revalidatePath("/calendario");
   revalidatePath("/contenuti");
+  revalidatePath("/home");
 }
 
 /** Set a block's Luca/Matteo delivery deadline to a given day (quick action). */

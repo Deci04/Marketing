@@ -18,7 +18,10 @@ import {
   updateContentAction,
   deleteContentAction,
   deleteCommentAction,
+  markDeliveredAction,
+  confirmContentAction,
 } from "@/app/(app)/contenuti/actions";
+import { workflowState } from "@/lib/workflow";
 import { updatePerformanceAction } from "@/app/(app)/kpi/actions";
 import { FORMAT_ORDER, FORMAT_LABELS, FORMAT_CHIP } from "@/lib/format";
 import { classChip } from "@/lib/classes";
@@ -46,6 +49,9 @@ export type ModalContent = {
   materialsUrl: string | null;
   videoProxyUrl: string | null;
   masterLink: string | null;
+  deliveredAt: string | null;
+  confirmedAt: string | null;
+  hasMontato: boolean;
   format: ContentFormat | null;
   classes: ModalClass[];
   block: { label: string; lucaDeliveryAt: string | null; matteoDeliveryAt: string | null } | null;
@@ -238,6 +244,74 @@ export function ContentModal({
                 <div className="space-y-5">
                   {!editing ? (
                     <>
+                      {(() => {
+                        const wf = workflowState({
+                          deliveredAt: content.deliveredAt ? new Date(content.deliveredAt) : null,
+                          confirmedAt: content.confirmedAt ? new Date(content.confirmedAt) : null,
+                          hasMontato: content.hasMontato,
+                        });
+                        const WF_TONE: Record<string, string> = {
+                          "Da consegnare": "bg-secondary text-muted-foreground",
+                          "Da revisionare": "bg-butter text-butter-ink",
+                          "Da confermare": "bg-lavender text-lavender-ink",
+                          Confermato: "bg-sage text-sage-ink",
+                        };
+                        return (
+                          <div className="rounded-2xl border border-border bg-secondary/40 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <div className="text-xs text-muted-foreground">Stato collaborazione</div>
+                                <span className={`mt-1 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-medium ${WF_TONE[wf]}`}>
+                                  {wf}
+                                </span>
+                              </div>
+                              {content.confirmedAt && (
+                                <span className="text-sm font-medium text-sage-ink">✓ Confermato</span>
+                              )}
+                              {content.hasMontato && !content.confirmedAt && (
+                                <form
+                                  action={async (fd) => {
+                                    await confirmContentAction(fd);
+                                    toast.success("Contenuto confermato");
+                                    router.refresh();
+                                  }}
+                                >
+                                  <input type="hidden" name="contentId" value={content.id} />
+                                  <button className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98]">
+                                    Conferma contenuto
+                                  </button>
+                                </form>
+                              )}
+                            </div>
+                            {!content.deliveredAt && (
+                              <form
+                                action={async (fd) => {
+                                  await markDeliveredAction(fd);
+                                  toast.success("Segnato come consegnato");
+                                  router.refresh();
+                                }}
+                                className="mt-3 flex flex-wrap items-center gap-2"
+                              >
+                                <input type="hidden" name="contentId" value={content.id} />
+                                <input
+                                  name="masterLink"
+                                  defaultValue={content.masterLink ?? ""}
+                                  placeholder="Link Drive/iCloud (opz.)"
+                                  className="min-w-0 flex-1 rounded-full border border-border bg-paper px-3.5 py-2 text-sm outline-none focus:border-ink/30"
+                                />
+                                <button className="rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-secondary">
+                                  Materiale consegnato
+                                </button>
+                              </form>
+                            )}
+                            {content.deliveredAt && !content.hasMontato && (
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                Materiale consegnato — in attesa del montato di Matteo.
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {content.hook && (
                         <div>
                           <div className="text-xs text-muted-foreground">Hook</div>
