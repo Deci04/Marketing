@@ -1,6 +1,6 @@
 import { currentContext } from "@/lib/current";
 import { listContents, engagementRate } from "@/lib/content";
-import { deriveStatus } from "@/lib/status";
+import { effectiveStatus } from "@/lib/status";
 import { ArchiveTable, type ArchiveRow } from "@/components/archive-table";
 
 export default async function ArchivioPage() {
@@ -20,7 +20,7 @@ export default async function ArchivioPage() {
         name: cl.name,
         color: cl.color,
       })),
-      status: deriveStatus({
+      status: effectiveStatus(c.statusOverride, {
         publishAt: c.publishAt,
         lucaDeliveryAt: c.block?.lucaDeliveryAt ?? null,
         matteoDeliveryAt: c.block?.matteoDeliveryAt ?? null,

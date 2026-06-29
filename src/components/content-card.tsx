@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { deriveStatus, type DerivedStatus } from "@/lib/status";
+import { effectiveStatus, isDerivedStatus } from "@/lib/status";
 import { workflowState } from "@/lib/workflow";
 import { FORMAT_CHIP, formatLabel } from "@/lib/format";
 import { classChip } from "@/lib/classes";
+import { StatusBadge } from "@/components/status-badge";
 import { InstagramLogo, YoutubeLogo } from "@phosphor-icons/react/dist/ssr";
 import type { Channel, ContentFormat } from "@prisma/client";
 
@@ -14,6 +15,7 @@ type CardContent = {
   publishAt: Date | null;
   hook: string | null;
   thumbnailUrl: string | null;
+  statusOverride?: string | null;
   deliveredAt?: Date | null;
   confirmedAt?: Date | null;
   videoProxyUrl?: string | null;
@@ -26,19 +28,15 @@ type CardContent = {
   } | null;
 };
 
-const STATUS_STYLE: Record<DerivedStatus, string> = {
-  "Da consegnare": "bg-secondary text-muted-foreground",
-  Consegnato: "bg-butter text-butter-ink",
-  Revisionato: "bg-lavender text-lavender-ink",
-  Pubblicato: "bg-sage text-sage-ink",
-};
-
 export function ContentCard({ content }: { content: CardContent }) {
-  const status = deriveStatus({
+  const statusInput = {
     publishAt: content.publishAt,
     lucaDeliveryAt: content.block?.lucaDeliveryAt ?? null,
     matteoDeliveryAt: content.block?.matteoDeliveryAt ?? null,
-  });
+  };
+  const status = effectiveStatus(content.statusOverride, statusInput);
+  const isOverride = isDerivedStatus(content.statusOverride ?? "");
+
   const isYt = content.channel === "YOUTUBE";
   const Logo = isYt ? YoutubeLogo : InstagramLogo;
   const cover = isYt ? "bg-coral" : "bg-blush";
@@ -50,7 +48,6 @@ export function ContentCard({ content }: { content: CardContent }) {
     confirmedAt: content.confirmedAt ?? null,
     hasMontato: content.videoProxyUrl != null || (content._count?.materials ?? 0) > 0,
   });
-  // Show a small "needs action" chip only when something is pending.
   const wfChip =
     wf === "Da revisionare"
       ? "bg-butter text-butter-ink"
@@ -59,11 +56,8 @@ export function ContentCard({ content }: { content: CardContent }) {
         : null;
 
   return (
-    <Link
-      href={`/contenuti/${content.id}`}
-      className="group block overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgba(26,24,19,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(26,24,19,0.09)]"
-    >
-      <div className={`relative h-28 overflow-hidden ${content.thumbnailUrl ? "bg-secondary" : cover}`}>
+    <div className="group relative rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgba(26,24,19,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(26,24,19,0.09)]">
+      <div className={`relative h-28 overflow-hidden rounded-t-2xl ${content.thumbnailUrl ? "bg-secondary" : cover}`}>
         {content.thumbnailUrl ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -86,11 +80,6 @@ export function ContentCard({ content }: { content: CardContent }) {
             />
           </>
         )}
-        <span
-          className={`absolute right-2.5 top-2.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${STATUS_STYLE[status]}`}
-        >
-          {status}
-        </span>
       </div>
       <div className="p-4">
         <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${channelInk}`}>
@@ -138,6 +127,17 @@ export function ContentCard({ content }: { content: CardContent }) {
           </div>
         )}
       </div>
-    </Link>
+
+      {/* Full-card navigation overlay (below the status badge) */}
+      <Link
+        href={`/contenuti/${content.id}`}
+        aria-label={content.title}
+        className="absolute inset-0 z-10 rounded-2xl"
+      />
+      {/* Interactive status badge — sits above the overlay so clicks open its menu */}
+      <div className="absolute right-2.5 top-2.5 z-20">
+        <StatusBadge contentId={content.id} status={status} isOverride={isOverride} />
+      </div>
+    </div>
   );
 }

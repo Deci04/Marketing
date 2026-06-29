@@ -4,7 +4,7 @@ import { listContents, listBlocks } from "@/lib/content";
 import { listClasses } from "@/lib/classes";
 import { FORMAT_ORDER, FORMAT_LABELS } from "@/lib/format";
 import { parseFormat } from "@/lib/format";
-import { deriveStatus } from "@/lib/status";
+import { effectiveStatus } from "@/lib/status";
 import { ContentCard } from "@/components/content-card";
 import { ContentFilters } from "@/components/content-filters";
 import { ClassManager } from "@/components/class-manager";
@@ -76,7 +76,7 @@ export default async function ContenutiPage({
   ]);
   const published = contents.filter(
     (c) =>
-      deriveStatus({
+      effectiveStatus(c.statusOverride, {
         publishAt: c.publishAt,
         lucaDeliveryAt: c.block?.lucaDeliveryAt ?? null,
         matteoDeliveryAt: c.block?.matteoDeliveryAt ?? null,

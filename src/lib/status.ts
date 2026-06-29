@@ -22,3 +22,24 @@ export function deriveStatus(
   if (passed(input.lucaDeliveryAt)) return "Consegnato";
   return "Da consegnare";
 }
+
+export const STATUS_VALUES: DerivedStatus[] = [
+  "Da consegnare",
+  "Consegnato",
+  "Revisionato",
+  "Pubblicato",
+];
+
+export function isDerivedStatus(s: string): s is DerivedStatus {
+  return (STATUS_VALUES as string[]).includes(s);
+}
+
+/** The status to show: a valid manual override if set, otherwise the auto-derived one. */
+export function effectiveStatus(
+  override: string | null | undefined,
+  input: StatusInput,
+  now?: Date
+): DerivedStatus {
+  if (override && isDerivedStatus(override)) return override;
+  return deriveStatus(input, now);
+}

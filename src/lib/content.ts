@@ -235,6 +235,20 @@ export async function setNotificationsSeen(userId: string) {
   });
 }
 
+/** Force a content's status manually, or clear the override (null = back to auto). */
+export async function setContentStatus(
+  workspaceId: string,
+  id: string,
+  status: string | null
+) {
+  const c = await db.content.findFirst({
+    where: scopedWhere(workspaceId, { id }),
+    select: { id: true },
+  });
+  if (!c) return null;
+  return db.content.update({ where: { id }, data: { statusOverride: status } });
+}
+
 export async function setContentThumbnail(
   workspaceId: string,
   contentId: string,
