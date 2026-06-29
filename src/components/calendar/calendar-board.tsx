@@ -67,6 +67,7 @@ export function CalendarBoard({
   weeks,
   items,
   blocks,
+  defaultResponsible = null,
   prevHref,
   nextHref,
 }: {
@@ -75,6 +76,7 @@ export function CalendarBoard({
   weeks: Cell[][];
   items: ItemDTO[];
   blocks: BandBlock[];
+  defaultResponsible?: "LUCA" | "MATTEO" | null;
   prevHref: string;
   nextHref: string;
 }) {
@@ -83,6 +85,20 @@ export function CalendarBoard({
   const [addDay, setAddDay] = useState<string | null>(null);
   const [showBlock, setShowBlock] = useState(false);
   const [selected, setSelected] = useState<ItemDTO | null>(null);
+  const [inlineDay, setInlineDay] = useState<string | null>(null);
+  const [inlineTitle, setInlineTitle] = useState("");
+
+  const quickAdd = async (ymd: string, title: string) => {
+    const fd = new FormData();
+    fd.set("title", title);
+    fd.set("date", ymd);
+    if (defaultResponsible) fd.set("responsible", defaultResponsible);
+    await addEventAction(fd);
+    toast.success("Evento aggiunto");
+    setInlineDay(null);
+    setInlineTitle("");
+    router.refresh();
+  };
 
   const byDay = new Map<string, ItemDTO[]>();
   for (const it of items) {
@@ -145,7 +161,7 @@ export function CalendarBoard({
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-lavender" /> Consegna Matteo</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-sage" /> Pubblicazione</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-butter" /> Evento</span>
-        <span className="text-muted-foreground/70">· trascina per spostare, × per eliminare</span>
+        <span className="text-muted-foreground/70">· clic su un giorno per aggiungere · trascina per spostare, × per eliminare</span>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -227,7 +243,11 @@ export function CalendarBoard({
                       }}
                       onDragLeave={() => setDragOver((d) => (d === cell.ymd ? null : d))}
                       onDrop={(e) => onDrop(cell.ymd, e)}
-                      className={`group/cell relative min-h-24 p-1.5 ${lastCol ? "" : "border-r"} border-border ${
+                      onClick={() => {
+                        setInlineTitle("");
+                        setInlineDay(cell.ymd);
+                      }}
+                      className={`group/cell relative min-h-24 cursor-pointer p-1.5 ${lastCol ? "" : "border-r"} border-border ${
                         cell.inMonth ? "" : "bg-cream/50"
                       } ${dragOver === cell.ymd ? "bg-lavender/30 ring-1 ring-inset ring-lavender-ink/30" : ""}`}
                     >
@@ -244,8 +264,11 @@ export function CalendarBoard({
                           {cell.day}
                         </span>
                         <button
-                          onClick={() => setAddDay(cell.ymd)}
-                          aria-label="Aggiungi evento"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAddDay(cell.ymd);
+                          }}
+                          aria-label="Aggiungi evento (form completo)"
                           className="opacity-0 transition-opacity hover:text-ink group-hover/cell:opacity-100 text-muted-foreground"
                         >
                           <Plus size={13} weight="bold" />
@@ -264,7 +287,10 @@ export function CalendarBoard({
                                   JSON.stringify({ refType: it.refType, refId: it.refId })
                                 )
                               }
-                              onClick={() => setSelected(it)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelected(it);
+                              }}
                               className={`group/chip flex cursor-grab items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium active:cursor-grabbing ${chipTone(it)}`}
                               title={it.label}
                             >
@@ -283,6 +309,29 @@ export function CalendarBoard({
                             </div>
                           );
                         })}
+                        {inlineDay === cell.ymd && (
+                          <input
+                            autoFocus
+                            value={inlineTitle}
+                            onChange={(e) => setInlineTitle(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                setInlineDay(null);
+                                return;
+                              }
+                              if (e.key === "Enter" && inlineTitle.trim()) {
+                                e.preventDefault();
+                                quickAdd(cell.ymd, inlineTitle.trim());
+                              }
+                            }}
+                            onBlur={() => {
+                              if (!inlineTitle.trim()) setInlineDay(null);
+                            }}
+                            placeholder="Titolo + Invio"
+                            className="w-full rounded-md border border-border bg-paper px-1.5 py-1 text-[11px] outline-none focus:ring-1 focus:ring-primary/40"
+                          />
+                        )}
                       </div>
                     </div>
                   );

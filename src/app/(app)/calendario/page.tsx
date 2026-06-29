@@ -59,6 +59,14 @@ export default async function CalendarioPage({
   const prev = month === 0 ? { y: year - 1, m: 11 } : { y: year, m: month - 1 };
   const next = month === 11 ? { y: year + 1, m: 0 } : { y: year, m: month + 1 };
 
+  // Pre-fill the responsible on quick-create with the logged-in user (2-person workspace).
+  const who = `${ctx.user.name ?? ""} ${ctx.user.email ?? ""}`.toLowerCase();
+  const defaultResponsible: "LUCA" | "MATTEO" | null = who.includes("matteo")
+    ? "MATTEO"
+    : who.includes("luca")
+      ? "LUCA"
+      : null;
+
   return (
     <div className="mx-auto max-w-5xl">
       <CalendarBoard
@@ -67,6 +75,7 @@ export default async function CalendarioPage({
         weeks={weeks}
         items={itemDtos}
         blocks={bandDtos}
+        defaultResponsible={defaultResponsible}
         prevHref={`/calendario?y=${prev.y}&m=${prev.m}`}
         nextHref={`/calendario?y=${next.y}&m=${next.m}`}
       />
