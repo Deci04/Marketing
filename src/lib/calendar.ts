@@ -161,6 +161,20 @@ async function scopedBlock(workspaceId: string, id: string) {
   return db.block.findFirst({ where: scopedWhere(workspaceId, { id }), select: { id: true } });
 }
 
+/** Set one of a block's delivery deadlines (Luca/Matteo) to a given day. */
+export async function setBlockDelivery(
+  workspaceId: string,
+  blockId: string,
+  who: "luca" | "matteo",
+  date: Date
+) {
+  if (!(await scopedBlock(workspaceId, blockId))) return null;
+  return db.block.update({
+    where: { id: blockId },
+    data: who === "luca" ? { lucaDeliveryAt: date } : { matteoDeliveryAt: date },
+  });
+}
+
 export async function moveItem(
   workspaceId: string,
   refType: BoardItemRef,

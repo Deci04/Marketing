@@ -8,6 +8,7 @@ import {
   addEvent,
   createBlockRange,
   resizeBlock,
+  setBlockDelivery,
   type BoardItemRef,
 } from "@/lib/calendar";
 import { createContent, listContents } from "@/lib/content";
@@ -81,6 +82,18 @@ export async function addContentAction(formData: FormData) {
   });
   revalidatePath("/calendario");
   revalidatePath("/contenuti");
+}
+
+/** Set a block's Luca/Matteo delivery deadline to a given day (quick action). */
+export async function setBlockDeliveryAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const blockId = String(formData.get("blockId") ?? "").trim();
+  const who = String(formData.get("who") ?? "").trim();
+  const ymd = String(formData.get("date") ?? "").trim();
+  if (!blockId || !ymd || (who !== "luca" && who !== "matteo")) return;
+  await setBlockDelivery(ctx.workspaceId, blockId, who, toUtc(ymd));
+  revalidatePath("/calendario");
 }
 
 export async function createBlockRangeAction(formData: FormData) {
