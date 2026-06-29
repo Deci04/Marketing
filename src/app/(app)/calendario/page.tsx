@@ -1,5 +1,6 @@
 import { currentContext } from "@/lib/current";
 import { getMonthItems, getMonthBlocks, monthMatrix } from "@/lib/calendar";
+import { listContents } from "@/lib/content";
 import { CalendarBoard } from "@/components/calendar/calendar-board";
 
 const MONTHS = [
@@ -21,10 +22,12 @@ export default async function CalendarioPage({
   const year = sp.y ? parseInt(sp.y, 10) : now.getUTCFullYear();
   const month = sp.m != null ? parseInt(sp.m, 10) : now.getUTCMonth();
 
-  const [items, blocks] = await Promise.all([
+  const [items, blocks, allContents] = await Promise.all([
     getMonthItems(ctx.workspaceId, year, month),
     getMonthBlocks(ctx.workspaceId, year, month),
+    listContents(ctx.workspaceId),
   ]);
+  const contentTitles = allContents.map((c) => c.title);
   const matrix = monthMatrix(year, month);
   const todayKey = ymd(
     new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
@@ -76,6 +79,7 @@ export default async function CalendarioPage({
         items={itemDtos}
         blocks={bandDtos}
         defaultResponsible={defaultResponsible}
+        contentTitles={contentTitles}
         prevHref={`/calendario?y=${prev.y}&m=${prev.m}`}
         nextHref={`/calendario?y=${next.y}&m=${next.m}`}
       />

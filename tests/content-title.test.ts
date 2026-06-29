@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nextNumericTitle } from "@/lib/content-title";
+import { nextNumericTitle, nextTitleForFormat } from "@/lib/content-title";
 
 describe("nextNumericTitle", () => {
   it("returns '1' when there are no titles", () => {
@@ -16,5 +16,23 @@ describe("nextNumericTitle", () => {
   });
   it("trims whitespace around numeric titles", () => {
     expect(nextNumericTitle(["1", " 2 "])).toBe("3");
+  });
+});
+
+describe("nextTitleForFormat", () => {
+  it("starts at 1 for a fresh type", () => {
+    expect(nextTitleForFormat([], "Reel")).toBe("Reel 1");
+  });
+  it("increments past existing same-type titles", () => {
+    expect(nextTitleForFormat(["Reel 1", "Reel 2"], "Reel")).toBe("Reel 3");
+  });
+  it("counts each type independently", () => {
+    expect(nextTitleForFormat(["Reel 1", "Carosello 1"], "Carosello")).toBe("Carosello 2");
+  });
+  it("ignores unrelated titles and is case-insensitive", () => {
+    expect(nextTitleForFormat(["CTO", "reel 1"], "Reel")).toBe("Reel 2");
+  });
+  it("fills gaps", () => {
+    expect(nextTitleForFormat(["Reel 1", "Reel 3"], "Reel")).toBe("Reel 2");
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
@@ -16,9 +16,12 @@ import {
   moveItemAction,
   deleteItemAction,
   addEventAction,
+  addContentAction,
   createBlockRangeAction,
   resizeBlockAction,
 } from "@/app/(app)/calendario/actions";
+import { FORMAT_ORDER, FORMAT_LABELS } from "@/lib/format";
+import { nextTitleForFormat } from "@/lib/content-title";
 
 type Ref = "luca" | "matteo" | "publication" | "event";
 type Cell = { ymd: string; day: number; inMonth: boolean; isToday: boolean };
@@ -68,6 +71,7 @@ export function CalendarBoard({
   items,
   blocks,
   defaultResponsible = null,
+  contentTitles = [],
   prevHref,
   nextHref,
 }: {
@@ -77,6 +81,7 @@ export function CalendarBoard({
   items: ItemDTO[];
   blocks: BandBlock[];
   defaultResponsible?: "LUCA" | "MATTEO" | null;
+  contentTitles?: string[];
   prevHref: string;
   nextHref: string;
 }) {
@@ -86,19 +91,6 @@ export function CalendarBoard({
   const [showBlock, setShowBlock] = useState(false);
   const [selected, setSelected] = useState<ItemDTO | null>(null);
   const [inlineDay, setInlineDay] = useState<string | null>(null);
-  const [inlineTitle, setInlineTitle] = useState("");
-
-  const quickAdd = async (ymd: string, title: string) => {
-    const fd = new FormData();
-    fd.set("title", title);
-    fd.set("date", ymd);
-    if (defaultResponsible) fd.set("responsible", defaultResponsible);
-    await addEventAction(fd);
-    toast.success("Evento aggiunto");
-    setInlineDay(null);
-    setInlineTitle("");
-    router.refresh();
-  };
 
   const byDay = new Map<string, ItemDTO[]>();
   for (const it of items) {
@@ -161,7 +153,7 @@ export function CalendarBoard({
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-lavender" /> Consegna Matteo</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-sage" /> Pubblicazione</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-butter" /> Evento</span>
-        <span className="text-muted-foreground/70">· clic su un giorno per aggiungere · trascina per spostare, × per eliminare</span>
+        <span className="text-muted-foreground/70">· clic su un giorno per creare contenuto o evento · trascina per spostare, × per eliminare</span>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -243,10 +235,7 @@ export function CalendarBoard({
                       }}
                       onDragLeave={() => setDragOver((d) => (d === cell.ymd ? null : d))}
                       onDrop={(e) => onDrop(cell.ymd, e)}
-                      onClick={() => {
-                        setInlineTitle("");
-                        setInlineDay(cell.ymd);
-                      }}
+                      onClick={() => setInlineDay(cell.ymd)}
                       className={`group/cell relative min-h-24 cursor-pointer p-1.5 ${lastCol ? "" : "border-r"} border-border ${
                         cell.inMonth ? "" : "bg-cream/50"
                       } ${dragOver === cell.ymd ? "bg-lavender/30 ring-1 ring-inset ring-lavender-ink/30" : ""}`}
@@ -310,26 +299,15 @@ export function CalendarBoard({
                           );
                         })}
                         {inlineDay === cell.ymd && (
-                          <input
-                            autoFocus
-                            value={inlineTitle}
-                            onChange={(e) => setInlineTitle(e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => {
-                              if (e.key === "Escape") {
-                                setInlineDay(null);
-                                return;
-                              }
-                              if (e.key === "Enter" && inlineTitle.trim()) {
-                                e.preventDefault();
-                                quickAdd(cell.ymd, inlineTitle.trim());
-                              }
+                          <QuickCreate
+                            day={cell.ymd}
+                            defaultResponsible={defaultResponsible}
+                            contentTitles={contentTitles}
+                            onClose={() => setInlineDay(null)}
+                            onCreated={() => {
+                              setInlineDay(null);
+                              router.refresh();
                             }}
-                            onBlur={() => {
-                              if (!inlineTitle.trim()) setInlineDay(null);
-                            }}
-                            placeholder="Titolo + Invio"
-                            className="w-full rounded-md border border-border bg-paper px-1.5 py-1 text-[11px] outline-none focus:ring-1 focus:ring-primary/40"
                           />
                         )}
                       </div>
@@ -540,6 +518,171 @@ function Dialog({ onClose, title, children }: { onClose: () => void; title: stri
           </button>
         </div>
         {children}
+      </div>
+    </div>
+  );
+}
+
+const QC_KEY = "calQuickDefaults";
+
+/** Fast in-cell creator: pick Contenuto (type pre-selected, name auto by type,
+ *  remembers last settings) or Evento. Click a day → this opens in the cell. */
+function QuickCreate({
+  day,
+  defaultResponsible,
+  contentTitles,
+  onClose,
+  onCreated,
+}: {
+  day: string;
+  defaultResponsible: "LUCA" | "MATTEO" | null;
+  contentTitles: string[];
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [mode, setMode] = useState<"content" | "event">("content");
+  const [format, setFormat] = useState<string>("REEL");
+  const [channel, setChannel] = useState<"INSTAGRAM" | "YOUTUBE">("INSTAGRAM");
+  const [title, setTitle] = useState("");
+  const [touched, setTouched] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  // Remember last-used settings so the next creation starts where you left off.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(QC_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d.mode === "content" || d.mode === "event") setMode(d.mode);
+        if (typeof d.format === "string") setFormat(d.format);
+        if (d.channel === "INSTAGRAM" || d.channel === "YOUTUBE") setChannel(d.channel);
+      }
+    } catch {}
+  }, []);
+
+  const label = FORMAT_LABELS[format as keyof typeof FORMAT_LABELS] ?? format;
+  const suggested =
+    mode === "content" && format ? nextTitleForFormat(contentTitles, label) : "";
+  const shown = touched ? title : suggested;
+
+  const submit = async () => {
+    if (busy) return;
+    try {
+      localStorage.setItem(QC_KEY, JSON.stringify({ mode, format, channel }));
+    } catch {}
+    const fd = new FormData();
+    fd.set("date", day);
+    if (mode === "content") {
+      setBusy(true);
+      fd.set("title", shown.trim());
+      fd.set("channel", channel);
+      if (format) fd.set("format", format);
+      await addContentAction(fd);
+      toast.success("Contenuto creato");
+      onCreated();
+    } else {
+      const t = (touched ? title : "").trim();
+      if (!t) return; // an event needs a title
+      setBusy(true);
+      fd.set("title", t);
+      if (defaultResponsible) fd.set("responsible", defaultResponsible);
+      await addEventAction(fd);
+      toast.success("Evento aggiunto");
+      onCreated();
+    }
+  };
+
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onClose();
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submit();
+        }
+      }}
+      className="absolute inset-x-1 top-7 z-50 rounded-xl border border-border bg-paper p-2 shadow-[0_12px_30px_rgba(26,24,19,0.18)]"
+    >
+      <div className="mb-2 flex rounded-lg bg-secondary p-0.5 text-[11px] font-medium">
+        {(["content", "event"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={`flex-1 rounded-md px-2 py-1 ${
+              mode === m ? "bg-paper text-ink shadow-sm" : "text-muted-foreground"
+            }`}
+          >
+            {m === "content" ? "Contenuto" : "Evento"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "content" && (
+        <>
+          <div className="mb-1.5 flex flex-wrap gap-1">
+            {FORMAT_ORDER.map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setFormat(f)}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  format === f
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                {FORMAT_LABELS[f]}
+              </button>
+            ))}
+          </div>
+          <div className="mb-1.5 flex gap-1">
+            {(["INSTAGRAM", "YOUTUBE"] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setChannel(c)}
+                className={`flex-1 rounded-md px-2 py-1 text-[10px] font-medium ${
+                  channel === c ? "bg-ink text-paper" : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                {c === "INSTAGRAM" ? "Instagram" : "YouTube"}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      <input
+        autoFocus
+        value={shown}
+        onChange={(e) => {
+          setTouched(true);
+          setTitle(e.target.value);
+        }}
+        placeholder={mode === "content" ? "Nome (automatico)" : "Titolo evento"}
+        className="w-full rounded-md border border-border bg-paper px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-primary/40"
+      />
+      <div className="mt-1.5 flex gap-1">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={busy}
+          className="flex-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
+        >
+          Crea {mode === "content" ? "contenuto" : "evento"}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground"
+        >
+          Esc
+        </button>
       </div>
     </div>
   );

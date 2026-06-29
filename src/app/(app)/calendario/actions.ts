@@ -10,6 +10,10 @@ import {
   resizeBlock,
   type BoardItemRef,
 } from "@/lib/calendar";
+import { createContent, listContents } from "@/lib/content";
+import { parseFormat, FORMAT_LABELS } from "@/lib/format";
+import { nextTitleForFormat, nextNumericTitle } from "@/lib/content-title";
+import type { Channel } from "@prisma/client";
 
 const toUtc = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 
@@ -52,6 +56,31 @@ export async function addEventAction(formData: FormData) {
   if (!title || !ymd) return;
   await addEvent(ctx.workspaceId, { date: toUtc(ymd), title, responsible });
   revalidatePath("/calendario");
+}
+
+/** Quick-create a content directly from the calendar: publishAt = clicked day.
+ *  Title optional → auto-named by type ("Reel 1", "Reel 2", …). */
+export async function addContentAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const ymd = String(formData.get("date") ?? "").trim();
+  if (!ymd) return;
+  const channel = (String(formData.get("channel") ?? "INSTAGRAM") as Channel);
+  const format = parseFormat(String(formData.get("format") ?? ""));
+  let title = String(formData.get("title") ?? "").trim();
+  if (!title) {
+    const existing = await listContents(ctx.workspaceId);
+    const titles = existing.map((c) => c.title);
+    title = format ? nextTitleForFormat(titles, FORMAT_LABELS[format]) : nextNumericTitle(titles);
+  }
+  await createContent(ctx.workspaceId, {
+    title,
+    channel,
+    format,
+    publishAt: toUtc(ymd),
+  });
+  revalidatePath("/calendario");
+  revalidatePath("/contenuti");
 }
 
 export async function createBlockRangeAction(formData: FormData) {
