@@ -20,24 +20,30 @@ export async function compressAndUploadVideoProxy(
   contentId: string,
   onProgress?: (ratio: number | null) => void
 ): Promise<{ url: string }> {
-  let toUpload: Blob;
-  let filename: string;
-  let contentType: string;
+  // Default: upload the original. Try compression; if it's unsupported, errors,
+  // or stalls (e.g. Safari/WebKit), fall back to the original (capped) so the
+  // upload never hangs.
+  let toUpload: Blob = file;
+  let filename = file.name;
+  let contentType = file.type || "video/mp4";
+  let compressed = false;
 
   if (isCompressionSupported()) {
-    const res = await compressToProxy(file, (r) => onProgress?.(r));
-    toUpload = res.blob;
-    filename = res.filename;
-    contentType = res.mimeType;
-  } else {
-    if (file.size > FALLBACK_MAX_BYTES) {
-      throw new VideoTooLargeError(
-        "Compressione non supportata dal browser e file troppo grande (max 50MB). Carica una clip più leggera."
-      );
+    try {
+      const res = await compressToProxy(file, (r) => onProgress?.(r));
+      toUpload = res.blob;
+      filename = res.filename;
+      contentType = res.mimeType;
+      compressed = true;
+    } catch {
+      // fall back to the original below
     }
-    toUpload = file;
-    filename = file.name;
-    contentType = file.type || "video/mp4";
+  }
+
+  if (!compressed && file.size > FALLBACK_MAX_BYTES) {
+    throw new VideoTooLargeError(
+      "Compressione non disponibile e file troppo grande (max 50MB). Carica una clip più leggera o usa il link al master esterno."
+    );
   }
 
   onProgress?.(null); // fase di upload

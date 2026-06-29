@@ -21,8 +21,20 @@
 const TARGET_MAX_HEIGHT = 720;
 const TARGET_VIDEO_BITRATE = 1_200_000; // ~1.2 Mbps — small but watchable for review
 
+/**
+ * Safari / iOS WebKit: `canvas.captureStream` + `MediaRecorder` + WebAudio
+ * playback is unreliable (the off-screen video's playback gets gated on a
+ * suspended AudioContext and never advances → the compression hangs). On these
+ * browsers we skip compression and upload the original (capped). Pure for tests.
+ */
+export function isSafariLike(ua: string): boolean {
+  if (/iPhone|iPad|iPod|CriOS|FxiOS/i.test(ua)) return true; // all iOS browsers are WebKit
+  return /Safari/i.test(ua) && !/Chrome|Chromium|Edg|Android/i.test(ua);
+}
+
 export function isCompressionSupported(): boolean {
   if (typeof window === "undefined") return false;
+  if (isSafariLike(navigator.userAgent)) return false;
   const canvas = document.createElement("canvas");
   return (
     typeof MediaRecorder !== "undefined" &&
@@ -83,6 +95,8 @@ export async function compressToProxy(
   video.crossOrigin = "anonymous";
 
   let audioCtx: AudioContext | null = null;
+  let rafId = 0;
+  let recorder: MediaRecorder | null = null;
 
   try {
     await new Promise<void>((resolve, reject) => {
@@ -131,7 +145,6 @@ export async function compressToProxy(
       video.muted = true;
     }
 
-    let rafId = 0;
     const drawLoop = () => {
       ctx.drawImage(video, 0, 0, outW, outH);
       const d = video.duration;
@@ -141,30 +154,57 @@ export async function compressToProxy(
       rafId = requestAnimationFrame(drawLoop);
     };
 
-    const recorder = new MediaRecorder(canvasStream, {
+    const rec = new MediaRecorder(canvasStream, {
       mimeType,
       videoBitsPerSecond: TARGET_VIDEO_BITRATE,
     });
+    recorder = rec; // hoisted ref so `finally` can stop it on the stall path
     const chunks: BlobPart[] = [];
-    recorder.ondataavailable = (e) => {
+    rec.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data);
     };
     const recordingDone = new Promise<Blob>((resolve) => {
-      recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+      rec.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
     });
 
-    recorder.start(250);
+    rec.start(250);
     drawLoop();
     if (audioCtx && audioCtx.state === "suspended") await audioCtx.resume();
     await video.play();
 
-    await new Promise<void>((resolve) => {
-      if (video.ended) return resolve();
-      video.onended = () => resolve();
+    // Watchdog: if playback never advances (e.g. Safari gates the off-screen
+    // video on a suspended AudioContext), give up so the caller can fall back
+    // to a direct upload instead of hanging at 0% forever.
+    const STALL_MS = 10_000;
+    await new Promise<void>((resolve, reject) => {
+      let last = -1;
+      let lastAdvance = Date.now();
+      const timer = window.setInterval(() => {
+        if (video.ended) {
+          window.clearInterval(timer);
+          resolve();
+        } else if (video.currentTime > last) {
+          last = video.currentTime;
+          lastAdvance = Date.now();
+        } else if (Date.now() - lastAdvance > STALL_MS) {
+          window.clearInterval(timer);
+          reject(new Error("Compressione bloccata: la riproduzione non avanza"));
+        }
+      }, 500);
+      if (video.ended) {
+        window.clearInterval(timer);
+        resolve();
+      } else {
+        video.onended = () => {
+          window.clearInterval(timer);
+          resolve();
+        };
+      }
     });
 
     cancelAnimationFrame(rafId);
-    recorder.stop();
+    if (rec.state !== "inactive") rec.stop();
+    rafId = 0;
     const blob = await recordingDone;
     onProgress?.(1);
 
@@ -172,6 +212,13 @@ export async function compressToProxy(
     const base = file.name.replace(/\.[^.]+$/, "");
     return { blob, mimeType, filename: `${base}-proxy.${ext}` };
   } finally {
+    // Stop everything (also on the stall/reject path) to avoid leaks.
+    cancelAnimationFrame(rafId);
+    if (recorder && recorder.state !== "inactive") {
+      try {
+        recorder.stop();
+      } catch {}
+    }
     URL.revokeObjectURL(url);
     if (audioCtx) audioCtx.close().catch(() => {});
   }
