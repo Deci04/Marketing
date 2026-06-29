@@ -22,6 +22,8 @@ import {
   confirmContentAction,
 } from "@/app/(app)/contenuti/actions";
 import { workflowState } from "@/lib/workflow";
+import { isDerivedStatus, type DerivedStatus } from "@/lib/status";
+import { StatusBadge } from "@/components/status-badge";
 import { updatePerformanceAction } from "@/app/(app)/kpi/actions";
 import { FORMAT_ORDER, FORMAT_LABELS, FORMAT_CHIP } from "@/lib/format";
 import { classChip } from "@/lib/classes";
@@ -42,6 +44,7 @@ export type ModalContent = {
   title: string;
   channel: "INSTAGRAM" | "YOUTUBE";
   status: string;
+  statusOverride: string | null;
   hook: string | null;
   publishAt: string | null;
   publishAtInput: string | null;
@@ -73,13 +76,6 @@ export type ModalComment = {
   createdAt: string;
   videoTimestamp: number | null;
   audioUrl: string | null;
-};
-
-const STATUS: Record<string, string> = {
-  "Da consegnare": "bg-secondary text-muted-foreground",
-  Consegnato: "bg-butter text-butter-ink",
-  Revisionato: "bg-lavender text-lavender-ink",
-  Pubblicato: "bg-sage text-sage-ink",
 };
 
 const TABS = ["Panoramica", "Materiali", "Performance"] as const;
@@ -195,9 +191,11 @@ export function ContentModal({
                   <Logo size={13} weight="fill" />
                   {isYt ? "YouTube" : "Instagram"}
                 </span>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS[content.status] ?? "bg-secondary text-muted-foreground"}`}>
-                  {content.status}
-                </span>
+                <StatusBadge
+                  contentId={content.id}
+                  status={content.status as DerivedStatus}
+                  isOverride={isDerivedStatus(content.statusOverride ?? "")}
+                />
               </div>
               <h2 className="mt-1.5 truncate font-heading text-2xl text-ink">{content.title}</h2>
             </div>

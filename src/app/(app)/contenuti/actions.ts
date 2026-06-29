@@ -22,7 +22,9 @@ import {
   setConfirmed,
   contentHasMontato,
   setNotificationsSeen,
+  setContentStatus,
 } from "@/lib/content";
+import { isDerivedStatus } from "@/lib/status";
 import { createActivity } from "@/lib/activity";
 import {
   createClass,
@@ -101,6 +103,21 @@ export async function confirmContentAction(formData: FormData) {
   });
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
+  revalidatePath("/home");
+}
+
+/** Force/clear a content's status manually. Empty value → back to auto. */
+export async function setContentStatusAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const contentId = String(formData.get("contentId") ?? "").trim();
+  if (!contentId) return;
+  const raw = String(formData.get("status") ?? "").trim();
+  const status = raw && isDerivedStatus(raw) ? raw : null;
+  await setContentStatus(ctx.workspaceId, contentId, status);
+  revalidatePath("/contenuti");
+  revalidatePath(`/contenuti/${contentId}`);
+  revalidatePath("/archivio");
   revalidatePath("/home");
 }
 

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { currentContext } from "@/lib/current";
 import { getContent, engagementRate } from "@/lib/content";
 import { listClasses } from "@/lib/classes";
-import { deriveStatus } from "@/lib/status";
+import { effectiveStatus } from "@/lib/status";
 import {
   ContentModal,
   type ModalContent,
@@ -31,11 +31,12 @@ export default async function ContentModalPage({
     channel: c.channel as "INSTAGRAM" | "YOUTUBE",
     format: c.format ?? null,
     classes: c.classes.map((cl) => ({ id: cl.id, name: cl.name, color: cl.color })),
-    status: deriveStatus({
+    status: effectiveStatus(c.statusOverride, {
       publishAt: c.publishAt,
       lucaDeliveryAt: c.block?.lucaDeliveryAt ?? null,
       matteoDeliveryAt: c.block?.matteoDeliveryAt ?? null,
     }),
+    statusOverride: c.statusOverride ?? null,
     hook: c.hook,
     publishAt: c.publishAt ? c.publishAt.toISOString() : null,
     publishAtInput: c.publishAt ? c.publishAt.toISOString().slice(0, 10) : null,

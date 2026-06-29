@@ -176,6 +176,7 @@ model Content {
   notes            String?
   deliveredAt      DateTime? // Luca ha segnato "materiale consegnato"
   confirmedAt      DateTime? // Luca ha confermato il montato
+  statusOverride   String? // stato forzato a mano (override dell'auto-derivato dalle date)
   materialsUrl     String?
   thumbnailUrl     String?
   videoProxyUrl    String? // proxy compresso di review su Blob
