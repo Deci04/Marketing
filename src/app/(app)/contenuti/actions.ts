@@ -18,7 +18,12 @@ import {
   addMaterial,
   removeMaterial,
   reorderMaterials,
+  setDelivered,
+  setConfirmed,
+  contentHasMontato,
+  setNotificationsSeen,
 } from "@/lib/content";
+import { createActivity } from "@/lib/activity";
 import {
   createClass,
   renameClass,
@@ -44,7 +49,7 @@ export async function createContentAction(formData: FormData) {
   const blockId = String(formData.get("blockId") ?? "") || null;
   const hook = String(formData.get("hook") ?? "") || null;
   const classIds = formData.getAll("classIds").map(String).filter(Boolean);
-  await createContent(ctx.workspaceId, {
+  const created = await createContent(ctx.workspaceId, {
     title,
     channel,
     format,
@@ -53,7 +58,58 @@ export async function createContentAction(formData: FormData) {
     hook,
     classIds,
   });
+  await createActivity(ctx.workspaceId, {
+    type: "CREATED",
+    contentId: created.id,
+    actorId: ctx.user.id,
+  });
   revalidatePath("/contenuti");
+  revalidatePath("/home");
+}
+
+// --- Collaboration lifecycle actions ---
+
+/** Luca: mark the material delivered (+ optional Drive/iCloud link). */
+export async function markDeliveredAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const contentId = String(formData.get("contentId") ?? "").trim();
+  if (!contentId) return;
+  const link = String(formData.get("masterLink") ?? "").trim() || null;
+  await setDelivered(ctx.workspaceId, contentId, link);
+  await createActivity(ctx.workspaceId, {
+    type: "DELIVERED",
+    contentId,
+    actorId: ctx.user.id,
+  });
+  revalidatePath(`/contenuti/${contentId}`);
+  revalidatePath("/contenuti");
+  revalidatePath("/home");
+}
+
+/** Luca: confirm the montato. */
+export async function confirmContentAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const contentId = String(formData.get("contentId") ?? "").trim();
+  if (!contentId) return;
+  await setConfirmed(ctx.workspaceId, contentId);
+  await createActivity(ctx.workspaceId, {
+    type: "CONFIRMED",
+    contentId,
+    actorId: ctx.user.id,
+  });
+  revalidatePath(`/contenuti/${contentId}`);
+  revalidatePath("/contenuti");
+  revalidatePath("/home");
+}
+
+/** Mark the activity feed as seen for the current user (clears the unread count). */
+export async function markNotificationsSeenAction() {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  await setNotificationsSeen(ctx.user.id);
+  revalidatePath("/");
 }
 
 export async function createBlockAction(formData: FormData) {
@@ -87,8 +143,14 @@ export async function addCommentAction(formData: FormData) {
     contentId,
     videoTimestamp,
   });
+  await createActivity(ctx.workspaceId, {
+    type: "COMMENT",
+    contentId,
+    actorId: ctx.user.id,
+  });
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
+  revalidatePath("/home");
 }
 
 /**
@@ -114,8 +176,14 @@ export async function addAudioCommentAction(formData: FormData) {
     audioUrl,
     videoTimestamp,
   });
+  await createActivity(ctx.workspaceId, {
+    type: "COMMENT",
+    contentId,
+    actorId: ctx.user.id,
+  });
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
+  revalidatePath("/home");
 }
 
 /** F4: persist the URL of the compressed review proxy (uploaded client-side to Blob). */
@@ -125,9 +193,18 @@ export async function setVideoProxyAction(formData: FormData) {
   const contentId = String(formData.get("contentId") ?? "");
   const url = String(formData.get("videoProxyUrl") ?? "").trim() || null;
   if (!contentId || !url) return;
+  const hadMontato = await contentHasMontato(ctx.workspaceId, contentId);
   await setContentVideoProxy(ctx.workspaceId, contentId, url);
+  if (!hadMontato) {
+    await createActivity(ctx.workspaceId, {
+      type: "REVIEW_READY",
+      contentId,
+      actorId: ctx.user.id,
+    });
+  }
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
+  revalidatePath("/home");
 }
 
 /** Materiali — aggiungi un materiale (foto o video) già caricato su Blob. */
@@ -140,9 +217,18 @@ export async function addMaterialAction(formData: FormData) {
   if (!contentId || !url || (kind !== "image" && kind !== "video")) {
     throw new Error("Dati materiale non validi");
   }
+  const hadMontato = await contentHasMontato(ctx.workspaceId, contentId);
   await addMaterial(ctx.workspaceId, contentId, kind, url);
+  if (!hadMontato) {
+    await createActivity(ctx.workspaceId, {
+      type: "REVIEW_READY",
+      contentId,
+      actorId: ctx.user.id,
+    });
+  }
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
+  revalidatePath("/home");
 }
 
 /** Materiali — rimuovi un materiale. */
