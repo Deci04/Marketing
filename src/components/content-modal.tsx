@@ -134,6 +134,10 @@ export function ContentModal({
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("Panoramica");
   const [editing, setEditing] = useState(false);
+  // Optimistic lifecycle state so the modal updates instantly on action
+  // (the intercepting-route slot can be slow to refetch on router.refresh()).
+  const [delivered, setDelivered] = useState(content.deliveredAt != null);
+  const [confirmed, setConfirmed] = useState(content.confirmedAt != null);
   const close = () => router.back();
 
   useEffect(() => {
@@ -246,8 +250,8 @@ export function ContentModal({
                     <>
                       {(() => {
                         const wf = workflowState({
-                          deliveredAt: content.deliveredAt ? new Date(content.deliveredAt) : null,
-                          confirmedAt: content.confirmedAt ? new Date(content.confirmedAt) : null,
+                          deliveredAt: delivered ? new Date() : null,
+                          confirmedAt: confirmed ? new Date() : null,
                           hasMontato: content.hasMontato,
                         });
                         const WF_TONE: Record<string, string> = {
@@ -265,12 +269,13 @@ export function ContentModal({
                                   {wf}
                                 </span>
                               </div>
-                              {content.confirmedAt && (
+                              {confirmed && (
                                 <span className="text-sm font-medium text-sage-ink">✓ Confermato</span>
                               )}
-                              {content.hasMontato && !content.confirmedAt && (
+                              {content.hasMontato && !confirmed && (
                                 <form
                                   action={async (fd) => {
+                                    setConfirmed(true);
                                     await confirmContentAction(fd);
                                     toast.success("Contenuto confermato");
                                     router.refresh();
@@ -283,9 +288,10 @@ export function ContentModal({
                                 </form>
                               )}
                             </div>
-                            {!content.deliveredAt && (
+                            {!delivered && (
                               <form
                                 action={async (fd) => {
+                                  setDelivered(true);
                                   await markDeliveredAction(fd);
                                   toast.success("Segnato come consegnato");
                                   router.refresh();
@@ -304,7 +310,7 @@ export function ContentModal({
                                 </button>
                               </form>
                             )}
-                            {content.deliveredAt && !content.hasMontato && (
+                            {delivered && !content.hasMontato && (
                               <p className="mt-2 text-xs text-muted-foreground">
                                 Materiale consegnato — in attesa del montato di Matteo.
                               </p>
