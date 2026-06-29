@@ -118,7 +118,16 @@ export async function getMonthItems(
   const end = new Date(Date.UTC(year, month + 1, 1));
   const items: BoardItem[] = [];
 
-  const blocks = await db.block.findMany({ where: scopedWhere(workspaceId) });
+  // Only blocks with a delivery deadline in this month can contribute items here
+  // (the in-loop checks still guard correctness). Avoids loading the whole table.
+  const blocks = await db.block.findMany({
+    where: scopedWhere(workspaceId, {
+      OR: [
+        { lucaDeliveryAt: { gte: start, lt: end } },
+        { matteoDeliveryAt: { gte: start, lt: end } },
+      ],
+    }),
+  });
   for (const b of blocks) {
     if (b.lucaDeliveryAt && b.lucaDeliveryAt >= start && b.lucaDeliveryAt < end) {
       items.push({ refType: "luca", refId: b.id, date: b.lucaDeliveryAt, label: `Luca · ${b.label}`, owner: "Luca", channel: null, href: null });
@@ -150,6 +159,20 @@ export async function getMonthItems(
 
 async function scopedBlock(workspaceId: string, id: string) {
   return db.block.findFirst({ where: scopedWhere(workspaceId, { id }), select: { id: true } });
+}
+
+/** Set one of a block's delivery deadlines (Luca/Matteo) to a given day. */
+export async function setBlockDelivery(
+  workspaceId: string,
+  blockId: string,
+  who: "luca" | "matteo",
+  date: Date
+) {
+  if (!(await scopedBlock(workspaceId, blockId))) return null;
+  return db.block.update({
+    where: { id: blockId },
+    data: who === "luca" ? { lucaDeliveryAt: date } : { matteoDeliveryAt: date },
+  });
 }
 
 export async function moveItem(

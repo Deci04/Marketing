@@ -7,6 +7,7 @@ import { currentContext } from "@/lib/current";
 import {
   createBlock,
   createContent,
+  listContents,
   addComment,
   setContentThumbnail,
   setContentVideoProxy,
@@ -25,13 +26,18 @@ import {
   setContentClasses,
 } from "@/lib/classes";
 import { parseFormat } from "@/lib/format";
+import { nextNumericTitle } from "@/lib/content-title";
 import type { Channel } from "@prisma/client";
 
 export async function createContentAction(formData: FormData) {
   const ctx = await currentContext();
   if (!ctx) return;
-  const title = String(formData.get("title") ?? "").trim();
-  if (!title) return;
+  // Title optional: when empty, auto-assign the next free numeric name (editable later).
+  let title = String(formData.get("title") ?? "").trim();
+  if (!title) {
+    const existing = await listContents(ctx.workspaceId);
+    title = nextNumericTitle(existing.map((c) => c.title));
+  }
   const channel = String(formData.get("channel") ?? "INSTAGRAM") as Channel;
   const format = parseFormat(String(formData.get("format") ?? ""));
   const publishRaw = String(formData.get("publishAt") ?? "");

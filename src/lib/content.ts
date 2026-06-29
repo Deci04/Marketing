@@ -15,6 +15,17 @@ export async function listContents(
   });
 }
 
+/** Most recently created content (for the home "Novità" feed). Same item shape
+ *  as listContents so cards/links work, ordered by createdAt desc. */
+export async function listRecentContent(workspaceId: string, limit = 5) {
+  return db.content.findMany({
+    where: scopedWhere(workspaceId),
+    include: { block: true, classes: true },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+}
+
 export async function getContent(workspaceId: string, id: string) {
   return db.content.findFirst({
     where: scopedWhere(workspaceId, { id }),

@@ -497,6 +497,12 @@ export async function addValueConversation(
   });
 }
 
+/** Lightweight count for the home stat — avoids the full getKpiOverview
+ *  (which also re-fetches all content + metric series the home doesn't use). */
+export async function countValueConversations(workspaceId: string) {
+  return db.valueConversation.count({ where: scopedWhere(workspaceId) });
+}
+
 export async function getKpiOverview(workspaceId: string) {
   const [erSeries, nfSeries, vc, contents] = await Promise.all([
     getMetricSeries(workspaceId, "engagement_rate"),

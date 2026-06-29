@@ -1,5 +1,6 @@
 import { currentContext } from "@/lib/current";
 import { getMonthItems, getMonthBlocks, monthMatrix } from "@/lib/calendar";
+import { listContents } from "@/lib/content";
 import { CalendarBoard } from "@/components/calendar/calendar-board";
 
 const MONTHS = [
@@ -21,10 +22,12 @@ export default async function CalendarioPage({
   const year = sp.y ? parseInt(sp.y, 10) : now.getUTCFullYear();
   const month = sp.m != null ? parseInt(sp.m, 10) : now.getUTCMonth();
 
-  const [items, blocks] = await Promise.all([
+  const [items, blocks, allContents] = await Promise.all([
     getMonthItems(ctx.workspaceId, year, month),
     getMonthBlocks(ctx.workspaceId, year, month),
+    listContents(ctx.workspaceId),
   ]);
+  const contentTitles = allContents.map((c) => c.title);
   const matrix = monthMatrix(year, month);
   const todayKey = ymd(
     new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
@@ -59,6 +62,14 @@ export default async function CalendarioPage({
   const prev = month === 0 ? { y: year - 1, m: 11 } : { y: year, m: month - 1 };
   const next = month === 11 ? { y: year + 1, m: 0 } : { y: year, m: month + 1 };
 
+  // Pre-fill the responsible on quick-create with the logged-in user (2-person workspace).
+  const who = `${ctx.user.name ?? ""} ${ctx.user.email ?? ""}`.toLowerCase();
+  const defaultResponsible: "LUCA" | "MATTEO" | null = who.includes("matteo")
+    ? "MATTEO"
+    : who.includes("luca")
+      ? "LUCA"
+      : null;
+
   return (
     <div className="mx-auto max-w-5xl">
       <CalendarBoard
@@ -67,6 +78,8 @@ export default async function CalendarioPage({
         weeks={weeks}
         items={itemDtos}
         blocks={bandDtos}
+        defaultResponsible={defaultResponsible}
+        contentTitles={contentTitles}
         prevHref={`/calendario?y=${prev.y}&m=${prev.m}`}
         nextHref={`/calendario?y=${next.y}&m=${next.m}`}
       />

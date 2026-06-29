@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
@@ -16,9 +16,13 @@ import {
   moveItemAction,
   deleteItemAction,
   addEventAction,
+  addContentAction,
+  setBlockDeliveryAction,
   createBlockRangeAction,
   resizeBlockAction,
 } from "@/app/(app)/calendario/actions";
+import { FORMAT_ORDER, FORMAT_LABELS } from "@/lib/format";
+import { nextTitleForFormat } from "@/lib/content-title";
 
 type Ref = "luca" | "matteo" | "publication" | "event";
 type Cell = { ymd: string; day: number; inMonth: boolean; isToday: boolean };
@@ -67,6 +71,8 @@ export function CalendarBoard({
   weeks,
   items,
   blocks,
+  defaultResponsible = null,
+  contentTitles = [],
   prevHref,
   nextHref,
 }: {
@@ -75,14 +81,16 @@ export function CalendarBoard({
   weeks: Cell[][];
   items: ItemDTO[];
   blocks: BandBlock[];
+  defaultResponsible?: "LUCA" | "MATTEO" | null;
+  contentTitles?: string[];
   prevHref: string;
   nextHref: string;
 }) {
   const router = useRouter();
   const [dragOver, setDragOver] = useState<string | null>(null);
-  const [addDay, setAddDay] = useState<string | null>(null);
   const [showBlock, setShowBlock] = useState(false);
   const [selected, setSelected] = useState<ItemDTO | null>(null);
+  const [inlineDay, setInlineDay] = useState<string | null>(null);
 
   const byDay = new Map<string, ItemDTO[]>();
   for (const it of items) {
@@ -145,7 +153,7 @@ export function CalendarBoard({
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-lavender" /> Consegna Matteo</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-sage" /> Pubblicazione</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-butter" /> Evento</span>
-        <span className="text-muted-foreground/70">· trascina per spostare, × per eliminare</span>
+        <span className="text-muted-foreground/70">· clic su un giorno per creare contenuto o evento · trascina per spostare, × per eliminare</span>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -227,7 +235,8 @@ export function CalendarBoard({
                       }}
                       onDragLeave={() => setDragOver((d) => (d === cell.ymd ? null : d))}
                       onDrop={(e) => onDrop(cell.ymd, e)}
-                      className={`group/cell relative min-h-24 p-1.5 ${lastCol ? "" : "border-r"} border-border ${
+                      onClick={() => setInlineDay(cell.ymd)}
+                      className={`group/cell relative min-h-24 cursor-pointer p-1.5 ${lastCol ? "" : "border-r"} border-border ${
                         cell.inMonth ? "" : "bg-cream/50"
                       } ${dragOver === cell.ymd ? "bg-lavender/30 ring-1 ring-inset ring-lavender-ink/30" : ""}`}
                     >
@@ -243,13 +252,12 @@ export function CalendarBoard({
                         >
                           {cell.day}
                         </span>
-                        <button
-                          onClick={() => setAddDay(cell.ymd)}
-                          aria-label="Aggiungi evento"
-                          className="opacity-0 transition-opacity hover:text-ink group-hover/cell:opacity-100 text-muted-foreground"
-                        >
-                          <Plus size={13} weight="bold" />
-                        </button>
+                        <Plus
+                          size={13}
+                          weight="bold"
+                          aria-hidden
+                          className="opacity-0 transition-opacity group-hover/cell:opacity-100 text-muted-foreground"
+                        />
                       </div>
                       <div className="space-y-1">
                         {dayItems.map((it) => {
@@ -264,7 +272,10 @@ export function CalendarBoard({
                                   JSON.stringify({ refType: it.refType, refId: it.refId })
                                 )
                               }
-                              onClick={() => setSelected(it)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelected(it);
+                              }}
                               className={`group/chip flex cursor-grab items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium active:cursor-grabbing ${chipTone(it)}`}
                               title={it.label}
                             >
@@ -293,34 +304,20 @@ export function CalendarBoard({
         })}
       </div>
 
-      {addDay && (
-        <Dialog onClose={() => setAddDay(null)} title="Nuovo evento">
-          <form
-            action={async (fd) => {
-              await addEventAction(fd);
-              toast.success("Evento aggiunto");
-              setAddDay(null);
-              router.refresh();
-            }}
-            className="space-y-3"
-          >
-            <input type="hidden" name="date" value={addDay} />
-            <Field label="Titolo">
-              <input name="title" required placeholder="Es. Call di redazione" className={inputCls} />
-            </Field>
-            <Field label="Data">
-              <input type="date" name="date" defaultValue={addDay} className={inputCls} />
-            </Field>
-            <Field label="Responsabile">
-              <select name="responsible" defaultValue="" className={inputCls}>
-                <option value="">Nessuno</option>
-                <option value="LUCA">Luca</option>
-                <option value="MATTEO">Matteo</option>
-              </select>
-            </Field>
-            <DialogActions onCancel={() => setAddDay(null)} submitLabel="Aggiungi" />
-          </form>
-        </Dialog>
+      {inlineDay && (
+        <QuickCreate
+          key={inlineDay}
+          day={inlineDay}
+          defaultResponsible={defaultResponsible}
+          contentTitles={contentTitles}
+          blockId={blocks.find((b) => inlineDay >= b.start && inlineDay <= b.end)?.id ?? null}
+          blockLabel={blocks.find((b) => inlineDay >= b.start && inlineDay <= b.end)?.label ?? null}
+          onClose={() => setInlineDay(null)}
+          onCreated={() => {
+            setInlineDay(null);
+            router.refresh();
+          }}
+        />
       )}
 
       {showBlock && (
@@ -491,6 +488,271 @@ function Dialog({ onClose, title, children }: { onClose: () => void; title: stri
           </button>
         </div>
         {children}
+      </div>
+    </div>
+  );
+}
+
+const QC_KEY = "calQuickDefaults";
+
+const fmtDayLabel = (ymd: string) => {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("it-IT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+};
+
+type QuickMode = "content" | "event" | "delivery";
+
+/** Fast creator shown as a centered card: pick Contenuto (type pre-selected,
+ *  name auto by type, remembers last settings), Evento (title + responsabile),
+ *  or — when the day is inside a block — Consegna (Luca/Matteo on that day). */
+function QuickCreate({
+  day,
+  defaultResponsible,
+  contentTitles,
+  blockId,
+  blockLabel,
+  onClose,
+  onCreated,
+}: {
+  day: string;
+  defaultResponsible: "LUCA" | "MATTEO" | null;
+  contentTitles: string[];
+  blockId: string | null;
+  blockLabel: string | null;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [mode, setMode] = useState<QuickMode>("content");
+  const [format, setFormat] = useState<string>("REEL");
+  const [channel, setChannel] = useState<"INSTAGRAM" | "YOUTUBE">("INSTAGRAM");
+  const [responsible, setResponsible] = useState<"" | "LUCA" | "MATTEO">(
+    defaultResponsible ?? ""
+  );
+  const [title, setTitle] = useState("");
+  const [touched, setTouched] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  // Remember last-used settings so the next creation starts where you left off.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(QC_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d.mode === "content" || d.mode === "event") setMode(d.mode);
+        if (typeof d.format === "string") setFormat(d.format);
+        if (d.channel === "INSTAGRAM" || d.channel === "YOUTUBE") setChannel(d.channel);
+      }
+    } catch {}
+  }, []);
+
+  const label = FORMAT_LABELS[format as keyof typeof FORMAT_LABELS] ?? format;
+  const suggested =
+    mode === "content" && format ? nextTitleForFormat(contentTitles, label) : "";
+  const shown = touched ? title : suggested;
+
+  const remember = () => {
+    try {
+      localStorage.setItem(QC_KEY, JSON.stringify({ mode, format, channel }));
+    } catch {}
+  };
+
+  const submit = async () => {
+    if (busy || mode === "delivery") return;
+    const fd = new FormData();
+    fd.set("date", day);
+    if (mode === "content") {
+      setBusy(true);
+      remember();
+      fd.set("title", shown.trim());
+      fd.set("channel", channel);
+      if (format) fd.set("format", format);
+      await addContentAction(fd);
+      toast.success("Contenuto creato");
+      onCreated();
+    } else {
+      const t = (touched ? title : "").trim();
+      if (!t) return; // an event needs a title
+      setBusy(true);
+      remember();
+      fd.set("title", t);
+      if (responsible) fd.set("responsible", responsible);
+      await addEventAction(fd);
+      toast.success("Evento aggiunto");
+      onCreated();
+    }
+  };
+
+  const setDelivery = async (who: "luca" | "matteo") => {
+    if (busy || !blockId) return;
+    setBusy(true);
+    const fd = new FormData();
+    fd.set("blockId", blockId);
+    fd.set("who", who);
+    fd.set("date", day);
+    await setBlockDeliveryAction(fd);
+    toast.success(who === "luca" ? "Consegna Luca impostata" : "Consegna Matteo impostata");
+    onCreated();
+  };
+
+  const tabs: QuickMode[] = blockId ? ["content", "event", "delivery"] : ["content", "event"];
+  const tabLabel: Record<QuickMode, string> = {
+    content: "Contenuto",
+    event: "Evento",
+    delivery: "Consegna",
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[12vh]">
+      <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={onClose} />
+      <div
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onClose();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        className="relative z-10 w-full max-w-sm rounded-3xl border border-border bg-paper p-5 shadow-[0_24px_60px_rgba(26,24,19,0.22)]"
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-heading text-lg text-ink capitalize">{fmtDayLabel(day)}</h2>
+          <button
+            onClick={onClose}
+            aria-label="Chiudi"
+            className="rounded-full border border-border bg-paper p-1.5 text-ink/55 hover:bg-secondary hover:text-ink"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        {blockLabel && (
+          <p className="mb-3 text-xs text-muted-foreground">
+            Dentro il blocco <span className="font-medium text-ink">{blockLabel}</span>
+          </p>
+        )}
+
+        <div className="mb-4 flex rounded-xl bg-secondary p-1 text-sm font-medium">
+          {tabs.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className={`flex-1 rounded-lg px-3 py-1.5 transition ${
+                mode === m ? "bg-paper text-ink shadow-sm" : "text-muted-foreground"
+              }`}
+            >
+              {tabLabel[m]}
+            </button>
+          ))}
+        </div>
+
+        {mode === "delivery" ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Imposta una scadenza su questo giorno per il blocco.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setDelivery("luca")}
+                disabled={busy}
+                className="flex-1 rounded-full bg-blush px-4 py-2.5 text-sm font-medium text-blush-ink disabled:opacity-50"
+              >
+                Consegna Luca
+              </button>
+              <button
+                type="button"
+                onClick={() => setDelivery("matteo")}
+                disabled={busy}
+                className="flex-1 rounded-full bg-lavender px-4 py-2.5 text-sm font-medium text-lavender-ink disabled:opacity-50"
+              >
+                Consegna Matteo
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {mode === "content" && (
+              <>
+                <div className="flex flex-wrap gap-1.5">
+                  {FORMAT_ORDER.map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setFormat(f)}
+                      className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                        format === f
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary text-muted-foreground hover:text-ink"
+                      }`}
+                    >
+                      {FORMAT_LABELS[f]}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  {(["INSTAGRAM", "YOUTUBE"] as const).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setChannel(c)}
+                      className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                        channel === c ? "bg-ink text-paper" : "bg-secondary text-muted-foreground"
+                      }`}
+                    >
+                      {c === "INSTAGRAM" ? "Instagram" : "YouTube"}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {mode === "event" && (
+              <div className="flex gap-1.5">
+                {([
+                  ["", "Nessuno"],
+                  ["LUCA", "Luca"],
+                  ["MATTEO", "Matteo"],
+                ] as const).map(([val, lbl]) => (
+                  <button
+                    key={lbl}
+                    type="button"
+                    onClick={() => setResponsible(val)}
+                    className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                      responsible === val ? "bg-ink text-paper" : "bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <input
+              autoFocus
+              value={shown}
+              onChange={(e) => {
+                setTouched(true);
+                setTitle(e.target.value);
+              }}
+              placeholder={mode === "content" ? "Nome (automatico)" : "Titolo evento"}
+              className="w-full rounded-xl border border-border bg-paper px-3.5 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/40"
+            />
+
+            <button
+              type="button"
+              onClick={submit}
+              disabled={busy}
+              className="w-full rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            >
+              Crea {mode === "content" ? "contenuto" : "evento"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

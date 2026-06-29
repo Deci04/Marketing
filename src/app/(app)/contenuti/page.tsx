@@ -108,13 +108,13 @@ export default async function ContenutiPage({
             className={`space-y-3 ${cardClass}`}
           >
             <h2 className="text-lg">Nuovo contenuto</h2>
-            <TextField name="title" required placeholder="Titolo / concept" />
+            <TextField name="title" placeholder="Titolo / concept (opz. — numero automatico)" />
             <SelectField name="channel" defaultValue="INSTAGRAM">
               <option value="INSTAGRAM">Instagram</option>
               <option value="YOUTUBE">YouTube</option>
             </SelectField>
-            <SelectField name="format" defaultValue="" aria-label="Tipologia">
-              <option value="">Tipologia (opz.)</option>
+            <SelectField name="format" defaultValue="REEL" aria-label="Tipologia">
+              <option value="">Nessuna tipologia</option>
               {FORMAT_ORDER.map((f) => (
                 <option key={f} value={f}>
                   {FORMAT_LABELS[f]}
