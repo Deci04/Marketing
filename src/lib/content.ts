@@ -10,7 +10,7 @@ export async function listContents(
 ) {
   return db.content.findMany({
     where: filtersToWhere(workspaceId, filters),
-    include: { block: true, classes: true },
+    include: { block: true, classes: true, _count: { select: { materials: true } } },
     orderBy: [{ publishAt: "asc" }, { createdAt: "desc" }],
   });
 }
