@@ -41,7 +41,10 @@ export default async function HomePage() {
     .filter((c) => c.publishAt && c.publishAt.getTime() >= now)
     .sort((a, b) => a.publishAt!.getTime() - b.publishAt!.getTime());
   const next = upcoming[0] ?? null;
-  const name = (ctx.user.name ?? ctx.user.email ?? "").split(" ")[0] || "ciao";
+  // Prefer the display name; otherwise fall back to the email's local part (drop
+  // the @domain) so we never greet with a raw address. (Seed should set a real name.)
+  const base = (ctx.user.name?.trim() || ctx.user.email?.split("@")[0] || "").split(" ")[0];
+  const name = base ? base.charAt(0).toUpperCase() + base.slice(1) : "ciao";
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
