@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude code (commit shared settings.json, ignore local overrides)
+.claude/settings.local.json
+
+# graphify — all outputs are regenerable (and rebuilt by the post-checkout/commit
+# hooks), so ignore the whole dir to avoid churn. Run /graphify to (re)build.
+graphify-out/
