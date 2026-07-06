@@ -2,7 +2,7 @@ import Link from "next/link";
 import { currentContext } from "@/lib/current";
 import { listContents } from "@/lib/content";
 import { countValueConversations } from "@/lib/kpi";
-import { workflowState } from "@/lib/workflow";
+import { homeActions, type HomeContent } from "@/lib/workflow";
 import { HomeIllustration } from "@/components/home-illustration";
 import {
   ArrowRight,
@@ -30,17 +30,20 @@ export default async function HomePage() {
     .sort((a, b) => a.publishAt!.getTime() - b.publishAt!.getTime());
   const next = upcoming[0] ?? null;
 
-  // "Da fare adesso": contents that still need an action in the Matteo↔Luca loop.
-  const todo = contents
-    .map((c) => ({
-      c,
-      wf: workflowState({
-        deliveredAt: c.deliveredAt,
-        confirmedAt: c.confirmedAt,
-        hasMontato: c.videoProxyUrl != null || c._count.materials > 0,
-      }),
-    }))
-    .filter(({ wf }) => wf === "Da revisionare" || wf === "Da confermare");
+  // "Da fare adesso": azioni imperative per ruolo (admin = Matteo revisiona,
+  // collaborator = Luca consegna/conferma), ordinate per urgenza, rumore zero.
+  const role: "luca" | "matteo" = ctx.user.isAdmin ? "matteo" : "luca";
+  const homeContents: HomeContent[] = contents.map((c) => ({
+    id: c.id,
+    title: c.title,
+    format: c.format,
+    deliveredAt: c.deliveredAt,
+    confirmedAt: c.confirmedAt,
+    hasMontato: c.videoProxyUrl != null || c._count.materials > 0,
+    block: c.block ? { lucaDeliveryAt: c.block.lucaDeliveryAt } : null,
+  }));
+  const actions = homeActions(homeContents, role, new Date());
+  const byId = new Map(contents.map((c) => [c.id, c]));
   // Prefer the display name; otherwise fall back to the email's local part (drop
   // the @domain) so we never greet with a raw address. (Seed should set a real name.)
   const base = (ctx.user.name?.trim() || ctx.user.email?.split("@")[0] || "").split(" ")[0];
@@ -107,39 +110,53 @@ export default async function HomePage() {
 
       <div>
         <h2 className="mb-3 text-lg">Da fare adesso</h2>
-        {todo.length === 0 ? (
+        {actions.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center text-sm text-muted-foreground">
             Tutto in pari ✨
           </div>
         ) : (
-          <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
-            {todo.map(({ c, wf }) => {
-              const isYt = c.channel === "YOUTUBE";
-              const Logo = isYt ? YoutubeLogo : InstagramLogo;
-              const ink = isYt ? "text-coral-ink" : "text-blush-ink";
-              const tone =
-                wf === "Da revisionare"
-                  ? "bg-butter text-butter-ink"
-                  : "bg-lavender text-lavender-ink";
-              return (
-                <Link
-                  key={c.id}
-                  href={`/contenuti/${c.id}`}
-                  className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-secondary/40"
-                >
-                  <span className={`shrink-0 ${ink}`}>
-                    <Logo size={18} weight="fill" />
+          <div className="space-y-3">
+            {actions.map((a) => (
+              <details
+                key={a.key}
+                className="group overflow-hidden rounded-2xl border border-border bg-card"
+              >
+                <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-4 [&::-webkit-details-marker]:hidden">
+                  <span className="shrink-0 text-xl leading-none">{a.emoji}</span>
+                  <span className="min-w-0 flex-1 text-[15px] font-medium text-ink">
+                    {a.text}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
-                    {c.title}
-                  </span>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${tone}`}>
-                    {wf}
-                  </span>
-                  <ArrowRight size={14} className="shrink-0 text-muted-foreground" />
-                </Link>
-              );
-            })}
+                  <ArrowRight
+                    size={16}
+                    className="shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+                  />
+                </summary>
+                <div className="divide-y divide-border border-t border-border">
+                  {a.contentIds.map((id) => {
+                    const c = byId.get(id);
+                    if (!c) return null;
+                    const isYt = c.channel === "YOUTUBE";
+                    const Logo = isYt ? YoutubeLogo : InstagramLogo;
+                    const ink = isYt ? "text-coral-ink" : "text-blush-ink";
+                    return (
+                      <Link
+                        key={id}
+                        href={`/contenuti/${id}`}
+                        className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-secondary/40"
+                      >
+                        <span className={`shrink-0 ${ink}`}>
+                          <Logo size={18} weight="fill" />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
+                          {c.title}
+                        </span>
+                        <ArrowRight size={14} className="shrink-0 text-muted-foreground" />
+                      </Link>
+                    );
+                  })}
+                </div>
+              </details>
+            ))}
           </div>
         )}
       </div>

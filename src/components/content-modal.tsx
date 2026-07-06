@@ -8,10 +8,14 @@ import {
   X,
   InstagramLogo,
   YoutubeLogo,
+  TiktokLogo,
   PaperPlaneTilt,
   PencilSimple,
   Trash,
   LinkSimple,
+  RocketLaunch,
+  UploadSimple,
+  CheckCircle,
 } from "@phosphor-icons/react";
 import {
   addCommentAction,
@@ -20,7 +24,9 @@ import {
   deleteCommentAction,
   markDeliveredAction,
   confirmContentAction,
+  publishContentAction,
 } from "@/app/(app)/contenuti/actions";
+import { uploadViaServer } from "@/lib/blob-upload";
 import { workflowState } from "@/lib/workflow";
 import { isDerivedStatus, type DerivedStatus } from "@/lib/status";
 import { StatusBadge } from "@/components/status-badge";
@@ -55,6 +61,10 @@ export type ModalContent = {
   deliveredAt: string | null;
   confirmedAt: string | null;
   hasMontato: boolean;
+  // Filone W — pubblicazione (opzionali: valorizzati dal builder della modale).
+  publishState?: string | null;
+  externalId?: string | null;
+  isAdmin?: boolean;
   format: ContentFormat | null;
   classes: ModalClass[];
   block: { label: string; lucaDeliveryAt: string | null; matteoDeliveryAt: string | null } | null;
@@ -114,6 +124,207 @@ function fmtDate(iso: string | null) {
     month: "long",
     year: "numeric",
   });
+}
+
+const PLATFORMS = [
+  { id: "INSTAGRAM", label: "Instagram", Logo: InstagramLogo },
+  { id: "YOUTUBE", label: "YouTube", Logo: YoutubeLogo },
+  { id: "TIKTOK", label: "TikTok", Logo: TiktokLogo },
+] as const;
+
+/**
+ * Filone W — pannello di pubblicazione. Visibile solo per contenuto CONFERMATO.
+ * Qualità non negoziabile: si pubblica SEMPRE l'originale a piena qualità, MAI il
+ * proxy. L'originale è il masterLink (link esterno) oppure un file caricato su
+ * Blob qui al momento del publish; il proxy di review non entra mai nel flusso.
+ */
+function PublishPanel({
+  contentId,
+  channel,
+  masterLink,
+  initialState,
+  initialExternalId,
+}: {
+  contentId: string;
+  channel: "INSTAGRAM" | "YOUTUBE";
+  masterLink: string | null;
+  initialState: string | null;
+  initialExternalId: string | null;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string[]>([channel]);
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [state, setState] = useState<string | null>(initialState);
+  const [externalId, setExternalId] = useState<string | null>(initialExternalId);
+
+  const toggle = (id: string) =>
+    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  if (state === "published") {
+    return (
+      <div className="rounded-2xl border border-sage bg-sage/30 p-4">
+        <div className="flex items-center gap-2 text-sm font-medium text-sage-ink">
+          <CheckCircle size={18} weight="fill" /> Pubblicato su Zernio
+        </div>
+        {externalId && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            ID post: <span className="font-mono">{externalId}</span> — KPI per-post
+            agganciati automaticamente.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  async function onPublish() {
+    if (selected.length === 0) {
+      toast.error("Seleziona almeno una piattaforma");
+      return;
+    }
+    // Guardrail lato UI: serve l'originale (masterLink o file caricato ora).
+    if (!masterLink && !file) {
+      toast.error("Carica l'originale a piena qualità o aggiungi il link al master");
+      return;
+    }
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.set("contentId", contentId);
+      for (const p of selected) fd.append("platforms", p);
+      // Se è stato scelto un file, caricalo su Blob (client→Blob) come originale.
+      if (file) {
+        const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const { url } = await uploadViaServer(file, `originals/${contentId}`, safe);
+        fd.set("originalUrl", url);
+      }
+      const res = await publishContentAction(fd);
+      if (!res.ok) {
+        setState("failed");
+        toast.error(res.error ?? "Pubblicazione fallita");
+        return;
+      }
+      setState("published");
+      setExternalId(res.externalId ?? null);
+      setOpen(false);
+      toast.success("Pubblicato: originale a piena qualità inviato a Zernio");
+      router.refresh();
+    } catch (e) {
+      setState("failed");
+      toast.error(e instanceof Error ? e.message : "Errore in pubblicazione");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-border bg-secondary/40 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs text-muted-foreground">Pubblicazione</div>
+          <p className="mt-0.5 text-sm text-ink">
+            {state === "failed"
+              ? "Ultimo tentativo fallito — riprova (l'originale è conservato)."
+              : "Contenuto confermato: pronto per la pubblicazione."}
+          </p>
+        </div>
+        {!open && (
+          <button
+            onClick={() => setOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98]"
+          >
+            <RocketLaunch size={15} weight="fill" /> Pubblica
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="mt-4 space-y-4">
+          <div>
+            <div className="mb-2 text-xs font-medium text-muted-foreground">
+              Piattaforme
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {PLATFORMS.map(({ id, label, Logo }) => {
+                const on = selected.includes(id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => toggle(id)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm transition-colors ${
+                      on
+                        ? "border-ink bg-ink text-paper"
+                        : "border-border bg-paper text-muted-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    <Logo size={14} weight="fill" /> {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-1 text-xs font-medium text-muted-foreground">
+              Originale a piena qualità
+            </div>
+            {masterLink ? (
+              <p className="text-sm text-ink">
+                Uso il master esterno collegato{" "}
+                <a
+                  href={masterLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blush-ink underline"
+                >
+                  (link)
+                </a>
+                .
+              </p>
+            ) : (
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border bg-paper px-3.5 py-2 text-sm text-ink hover:bg-secondary">
+                <UploadSimple size={15} />
+                {file ? file.name : "Carica l'originale (video/immagine)"}
+                <input
+                  type="file"
+                  accept="video/*,image/*"
+                  className="hidden"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-butter bg-butter/40 px-3.5 py-2.5 text-xs text-butter-ink">
+            Pubblico <strong>l&rsquo;originale a piena qualità</strong>, mai il proxy
+            compresso di review. Verifica che il file sia quello giusto prima di
+            confermare.
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={onPublish}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-60"
+            >
+              <RocketLaunch size={15} weight="fill" />
+              {busy ? "Pubblico…" : "Conferma e pubblica"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              disabled={busy}
+              className="rounded-full border border-border px-4 py-2.5 text-sm text-muted-foreground hover:bg-secondary disabled:opacity-60"
+            >
+              Annulla
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ContentModal({
@@ -316,6 +527,15 @@ export function ContentModal({
                           </div>
                         );
                       })()}
+                      {confirmed && (content.isAdmin ?? false) && (
+                        <PublishPanel
+                          contentId={content.id}
+                          channel={content.channel}
+                          masterLink={content.masterLink}
+                          initialState={content.publishState ?? null}
+                          initialExternalId={content.externalId ?? null}
+                        />
+                      )}
                       {content.hook && (
                         <div>
                           <div className="text-xs text-muted-foreground">Hook</div>

@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
 import { filtersToWhere, type ContentFilters } from "@/lib/classes";
 import { coverUrl } from "@/lib/materials";
+import { effectiveStatus } from "@/lib/status";
+import { syncItemOut, deleteItemOut } from "@/lib/google-calendar";
 import type { Channel, ContentFormat } from "@prisma/client";
 
 export async function listContents(
@@ -86,7 +88,7 @@ export async function createContent(
       ).map((c) => c.id)
     : [];
 
-  return db.content.create({
+  const created = await db.content.create({
     data: {
       workspaceId,
       title: data.title,
@@ -101,6 +103,11 @@ export async function createContent(
         : {}),
     },
   });
+  // G: USCITA — push su Google se il contenuto ha una data di pubblicazione.
+  if (data.publishAt != null) {
+    void syncItemOut(workspaceId, "publication", created.id).catch(() => {});
+  }
+  return created;
 }
 
 export async function addComment(
@@ -136,6 +143,73 @@ export async function deleteComment(workspaceId: string, id: string) {
   });
   if (!c) return null;
   return db.comment.delete({ where: { id } });
+}
+
+// --- S: ricerca + archivio (pure, side-effect-free helpers) ---
+
+/** A content auto-archives once it has been "Pubblicato" for more than this
+ *  many days. Age is measured from `publishAt` (UTC). */
+export const ARCHIVE_AFTER_DAYS = 14;
+
+/** Minimal shape the archive/search helpers need — matches what `listContents`
+ *  returns (block + status + text fields). Kept structural so in-memory fixtures
+ *  and Prisma rows both satisfy it. */
+type ArchivableContent = {
+  statusOverride?: string | null;
+  publishAt?: Date | null;
+  block?: {
+    lucaDeliveryAt?: Date | null;
+    matteoDeliveryAt?: Date | null;
+  } | null;
+};
+
+/** True when a content should live in the archive: its effective status is
+ *  "Pubblicato" AND it was published strictly more than ARCHIVE_AFTER_DAYS ago.
+ *  A content without a publish date (age unknown) stays active. */
+export function isArchived(
+  content: ArchivableContent,
+  now: Date = new Date()
+): boolean {
+  const status = effectiveStatus(
+    content.statusOverride ?? null,
+    {
+      publishAt: content.publishAt ?? null,
+      lucaDeliveryAt: content.block?.lucaDeliveryAt ?? null,
+      matteoDeliveryAt: content.block?.matteoDeliveryAt ?? null,
+    },
+    now
+  );
+  if (status !== "Pubblicato") return false;
+  if (!content.publishAt) return false;
+  const ageMs = now.getTime() - content.publishAt.getTime();
+  return ageMs > ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/** Partition contents into the active list (shown in /contenuti) and the
+ *  archived list (shown in /archivio), preserving input order in each. */
+export function splitActiveArchived<T extends ArchivableContent>(
+  contents: T[],
+  now: Date = new Date()
+): { active: T[]; archived: T[] } {
+  const active: T[] = [];
+  const archived: T[] = [];
+  for (const c of contents) {
+    (isArchived(c, now) ? archived : active).push(c);
+  }
+  return { active, archived };
+}
+
+/** Free-text search over title / hook / notes (case-insensitive). An empty or
+ *  whitespace-only query matches everything. Client-side for now (spec S). */
+export function matchesSearch(
+  content: { title?: string | null; hook?: string | null; notes?: string | null },
+  query: string
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [content.title, content.hook, content.notes].some((field) =>
+    (field ?? "").toLowerCase().includes(q)
+  );
 }
 
 /** Engagement rate = interactions / reach. Null until reach is known. */
@@ -176,7 +250,16 @@ export async function updateContent(
     select: { id: true },
   });
   if (!c) return null;
-  return db.content.update({ where: { id }, data });
+  const updated = await db.content.update({ where: { id }, data });
+  // G: USCITA — riflette il cambio di publishAt su Google (push o rimozione link).
+  if ("publishAt" in data) {
+    if (data.publishAt != null) {
+      void syncItemOut(workspaceId, "publication", id).catch(() => {});
+    } else {
+      void deleteItemOut(workspaceId, "publication", id).catch(() => {});
+    }
+  }
+  return updated;
 }
 
 export async function deleteContent(workspaceId: string, id: string) {
@@ -185,6 +268,8 @@ export async function deleteContent(workspaceId: string, id: string) {
     select: { id: true },
   });
   if (!c) return null;
+  // G: USCITA — rimuove l'evento Google + il link prima di eliminare il contenuto.
+  void deleteItemOut(workspaceId, "publication", id).catch(() => {});
   await db.comment.deleteMany({ where: { contentId: id } });
   return db.content.delete({ where: { id } });
 }

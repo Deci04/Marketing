@@ -2,8 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { put } from "@vercel/blob";
+import { put, del } from "@vercel/blob";
 import { currentContext } from "@/lib/current";
+import { db } from "@/lib/db";
+import { scopedWhere } from "@/lib/workspace";
+import { publish, isConfigured } from "@/lib/zernio";
 import {
   createBlock,
   createContent,
@@ -104,6 +107,147 @@ export async function confirmContentAction(formData: FormData) {
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
   revalidatePath("/home");
+}
+
+/**
+ * Filone W — Pubblicazione via Zernio (solo admin).
+ *
+ * Da un contenuto CONFERMATO: risolve l'ORIGINALE a piena qualità (mai il proxy),
+ * pubblica via Zernio e, al successo, salva `externalId` + `publishState="published"`.
+ *
+ * Sorgente originale (in ordine): un originale caricato su Blob al momento del
+ * publish (`originalUrl`), altrimenti `Content.masterLink` (Drive/iCloud). Il
+ * `videoProxyUrl` NON viene MAI usato: non è nemmeno letto per il mediaUrl.
+ *
+ * Ciclo di vita file: al successo, se avevamo caricato l'originale su Blob lo
+ * cancelliamo (resta solo il proxy). Su errore → `publishState="failed"` +
+ * `publishError`, e l'originale resta per il retry (nessuna cancellazione).
+ */
+export async function publishContentAction(
+  formData: FormData
+): Promise<{ ok: boolean; error?: string; externalId?: string }> {
+  const ctx = await currentContext();
+  if (!ctx) return { ok: false, error: "Non autorizzato" };
+  // Solo admin può pubblicare.
+  if (!ctx.user.isAdmin)
+    return { ok: false, error: "Solo l'admin può pubblicare" };
+
+  const contentId = String(formData.get("contentId") ?? "").trim();
+  if (!contentId) return { ok: false, error: "Contenuto mancante" };
+
+  const platforms = formData.getAll("platforms").map(String).filter(Boolean);
+  if (platforms.length === 0)
+    return { ok: false, error: "Seleziona almeno una piattaforma" };
+
+  // Originale caricato su Blob al momento del publish (client→Blob), opzionale.
+  const uploadedOriginalUrl =
+    String(formData.get("originalUrl") ?? "").trim() || null;
+  const scheduledRaw = String(formData.get("scheduledAt") ?? "").trim();
+  const scheduledAt = scheduledRaw ? new Date(scheduledRaw) : undefined;
+
+  const content = await db.content.findFirst({
+    where: scopedWhere(ctx.workspaceId, { id: contentId }),
+    select: {
+      id: true,
+      title: true,
+      hook: true,
+      masterLink: true,
+      confirmedAt: true,
+      // NB: videoProxyUrl NON entra nella risoluzione del mediaUrl.
+    },
+  });
+  if (!content) return { ok: false, error: "Contenuto non trovato" };
+  // Si pubblica solo un contenuto confermato.
+  if (!content.confirmedAt)
+    return { ok: false, error: "Il contenuto non è confermato" };
+
+  // Risoluzione ORIGINALE a piena qualità — mai il proxy.
+  const mediaUrl = uploadedOriginalUrl ?? content.masterLink ?? null;
+
+  // Guardrail: senza originale non si pubblica (originale conservato per retry).
+  if (!mediaUrl) {
+    await db.content.update({
+      where: { id: content.id },
+      data: {
+        publishState: "failed",
+        publishError: "Manca l'originale a piena qualità",
+      },
+    });
+    revalidatePath(`/contenuti/${content.id}`);
+    revalidatePath("/contenuti");
+    return {
+      ok: false,
+      error:
+        "Manca l'originale a piena qualità: carica l'originale o aggiungi il link al master.",
+    };
+  }
+
+  if (!isConfigured())
+    return { ok: false, error: "Zernio non configurato" };
+
+  // Claim atomico: passa a publishing/scheduled SOLO da uno stato ripubblicabile
+  // (mai-pubblicato = null, oppure failed/scheduled). Blocca la ri-pubblicazione di
+  // un post già "published" (che sovrascriverebbe externalId perdendo l'aggancio KPI
+  // del post originale) e il doppio-submit concorrente (nessun unique su externalId).
+  // NB: `in: [null, ...]` in SQL non matcha NULL → serve la forma OR esplicita.
+  const claimed = await db.content.updateMany({
+    where: scopedWhere(ctx.workspaceId, {
+      id: content.id,
+      OR: [
+        { publishState: null },
+        { publishState: { in: ["failed", "scheduled"] } },
+      ],
+    }),
+    data: {
+      publishState: scheduledAt ? "scheduled" : "publishing",
+      publishError: null,
+    },
+  });
+  if (claimed.count === 0)
+    return { ok: false, error: "Contenuto già pubblicato o in pubblicazione" };
+
+  const result = await publish({
+    workspaceId: ctx.workspaceId,
+    contentId: content.id,
+    platforms,
+    mediaUrl,
+    caption: content.hook ?? content.title,
+    scheduledAt,
+  });
+
+  if ("error" in result) {
+    // Su errore: failed + messaggio, originale conservato (nessun del).
+    await db.content.update({
+      where: { id: content.id },
+      data: { publishState: "failed", publishError: result.error },
+    });
+    revalidatePath(`/contenuti/${content.id}`);
+    revalidatePath("/contenuti");
+    return { ok: false, error: result.error };
+  }
+
+  // Successo: salva externalId + stato; aggancio KPI per-post automatico (Z).
+  await db.content.update({
+    where: { id: content.id },
+    data: {
+      externalId: result.externalId,
+      publishState: scheduledAt ? "scheduled" : "published",
+      publishError: null,
+    },
+  });
+
+  // Se avevamo caricato l'originale su Blob e il post è già pubblicato (non
+  // programmato), lo cancelliamo: resta solo il proxy. Per i programmati NON si
+  // cancella (Zernio potrebbe attingervi al momento dell'uscita).
+  if (uploadedOriginalUrl && !scheduledAt) {
+    await del(uploadedOriginalUrl).catch(() => {});
+  }
+
+  revalidatePath(`/contenuti/${content.id}`);
+  revalidatePath("/contenuti");
+  revalidatePath("/archivio");
+  revalidatePath("/home");
+  return { ok: true, externalId: result.externalId };
 }
 
 /** Force/clear a content's status manually. Empty value → back to auto. */

@@ -4,6 +4,7 @@ import { listBlocks, listContents } from "@/lib/content";
 import { getMonthEvents } from "@/lib/calendar";
 import { getKpiOverview } from "@/lib/kpi";
 import { listClasses } from "@/lib/classes";
+import { searchDiaryEntries } from "@/lib/diary";
 
 /**
  * READ-ONLY tools for the shared workspace assistant (F3, first half).
@@ -131,6 +132,29 @@ export function readOnlyTools(workspaceId: string) {
       execute: async () => {
         const classes = await listClasses(workspaceId);
         return classes.map((c) => ({ id: c.id, name: c.name, color: c.color }));
+      },
+    }),
+
+    searchDiary: tool({
+      description:
+        "Cerca nel DIARIO di Luca: note, foto e video inviati via Telegram (testo, didascalia, e descrizione AI delle foto). Usalo per proporre spunti/contenuti basati su ciò che Luca ha realmente girato.",
+      inputSchema: z.object({
+        query: z
+          .string()
+          .optional()
+          .describe("Testo da cercare (parola chiave); vuoto = ultime voci"),
+        limit: z.number().int().min(1).max(50).optional().describe("Max risultati (default 20)"),
+      }),
+      execute: async ({ query, limit }) => {
+        const entries = await searchDiaryEntries(workspaceId, { query, limit });
+        return entries.map((e) => ({
+          id: e.id,
+          date: e.createdAt.toISOString(),
+          text: e.rawText ?? e.caption ?? null,
+          aiTitle: e.aiTitle ?? null,
+          aiDescription: e.aiDescription ?? null,
+          mediaType: e.telegramFileType ?? null,
+        }));
       },
     }),
   };

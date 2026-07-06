@@ -1,12 +1,19 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { currentContext } from "@/lib/current";
-import { listContents, listBlocks } from "@/lib/content";
+import {
+  listContents,
+  listBlocks,
+  splitActiveArchived,
+  matchesSearch,
+} from "@/lib/content";
 import { listClasses } from "@/lib/classes";
 import { FORMAT_ORDER, FORMAT_LABELS } from "@/lib/format";
 import { parseFormat } from "@/lib/format";
 import { effectiveStatus } from "@/lib/status";
 import { ContentCard } from "@/components/content-card";
 import { ContentFilters } from "@/components/content-filters";
+import { ContentSearch } from "./content-search";
 import { ClassManager } from "@/components/class-manager";
 import { ClassSelect } from "@/components/class-select";
 import { TextField, SelectField } from "@/components/field";
@@ -15,9 +22,10 @@ import { createContentAction, createBlockAction } from "./actions";
 import {
   Stack,
   PaperPlaneTilt,
-  Files,
+  Archive,
   Plus,
   Tag,
+  ArrowRight,
 } from "@phosphor-icons/react/dist/ssr";
 
 const cardClass =
@@ -67,14 +75,28 @@ export default async function ContenutiPage({
     .map((f) => parseFormat(f))
     .filter((f): f is NonNullable<typeof f> => f != null);
   const classIds = toArray(sp.class);
+  const query = typeof sp.q === "string" ? sp.q : "";
+  const includeArchived = sp.archivio === "1";
   const hasFilters = formats.length > 0 || classIds.length > 0;
+  const isSearching = query.trim().length > 0;
 
   const [contents, blocks, classes] = await Promise.all([
     listContents(ctx.workspaceId, { formats, classIds }),
     listBlocks(ctx.workspaceId),
     listClasses(ctx.workspaceId),
   ]);
-  const published = contents.filter(
+
+  // Split into active (shown here) vs archived (Pubblicato da >14 giorni → /archivio).
+  const now = new Date();
+  const { active, archived } = splitActiveArchived(contents, now);
+
+  // While searching, optionally widen the pool to include the archive.
+  const pool = isSearching && includeArchived ? contents : active;
+  const visible = isSearching
+    ? pool.filter((c) => matchesSearch(c, query))
+    : active;
+
+  const published = active.filter(
     (c) =>
       effectiveStatus(c.statusOverride, {
         publishAt: c.publishAt,
@@ -82,14 +104,14 @@ export default async function ContenutiPage({
         matteoDeliveryAt: c.block?.matteoDeliveryAt ?? null,
       }) === "Pubblicato"
   ).length;
-  const pipeline = contents.length - published;
-  const n = contents.length;
-  const subtitle = `${n} ${n === 1 ? "contenuto" : "contenuti"} · ${pipeline} in lavorazione`;
+  const pipeline = active.length - published;
+  const n = visible.length;
+  const subtitle = `${active.length} ${active.length === 1 ? "attivo" : "attivi"} · ${pipeline} in lavorazione`;
 
-  // Group contents by publication month ("Senza data" first, then chronological).
+  // Group visible contents by publication month ("Senza data" first, then chronological).
   type Group = { key: string; label: string; sort: number; items: typeof contents };
   const groupMap = new Map<string, Group>();
-  for (const c of contents) {
+  for (const c of visible) {
     const d = c.publishAt;
     const key = d ? `${d.getUTCFullYear()}-${d.getUTCMonth()}` : "none";
     const label = d
@@ -205,16 +227,35 @@ export default async function ContenutiPage({
           tone="bg-butter text-butter-ink"
           icon={<PaperPlaneTilt size={20} weight="fill" />}
         />
-        <Stat
-          label="Totale"
-          value={n}
-          tone="bg-blush text-blush-ink"
-          icon={<Files size={20} weight="fill" />}
-        />
+        <Link
+          href="/archivio"
+          className="rounded-2xl transition-transform active:scale-[0.98]"
+        >
+          <Stat
+            label="In archivio"
+            value={archived.length}
+            tone="bg-blush text-blush-ink"
+            icon={<Archive size={20} weight="fill" />}
+          />
+        </Link>
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-lg">Tutti i contenuti</h2>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-lg">Contenuti attivi</h2>
+          {archived.length > 0 && (
+            <Link
+              href="/archivio"
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-ink"
+            >
+              Archivio ({archived.length})
+              <ArrowRight size={12} weight="bold" />
+            </Link>
+          )}
+        </div>
+        <Suspense fallback={null}>
+          <ContentSearch />
+        </Suspense>
         <Suspense fallback={null}>
           <ContentFilters
             formatOptions={FORMAT_ORDER.map((f) => ({
@@ -226,9 +267,13 @@ export default async function ContenutiPage({
         </Suspense>
         {n === 0 ? (
           <div className="rounded-2xl border border-dashed border-border bg-card/50 p-10 text-center text-sm text-muted-foreground">
-            {hasFilters
-              ? "Nessun contenuto corrisponde ai filtri selezionati."
-              : "Nessun contenuto ancora. Premi Nuovo per crearne uno."}
+            {isSearching
+              ? includeArchived
+                ? "Nessun contenuto (attivi o archivio) corrisponde alla ricerca."
+                : "Nessun contenuto attivo corrisponde alla ricerca. Prova ad attivare la ricerca nell'archivio."
+              : hasFilters
+                ? "Nessun contenuto attivo corrisponde ai filtri selezionati."
+                : "Nessun contenuto attivo. Premi Nuovo per crearne uno."}
           </div>
         ) : (
           <div className="space-y-6">

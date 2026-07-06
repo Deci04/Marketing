@@ -1,10 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { currentContext } from "@/lib/current";
+import { currentContext, currentUser } from "@/lib/current";
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
 import { updateContent } from "@/lib/content";
+import {
+  fetchAnalytics,
+  ingestAnalytics,
+  isConfigured,
+  platformToChannel,
+  type IngestSummary,
+} from "@/lib/zernio";
 import type { Channel, Prisma } from "@prisma/client";
 
 function num(v: FormDataEntryValue | null): number | null {
@@ -263,4 +270,52 @@ export async function resetDashboardLayoutAction() {
     })
     .catch(() => {});
   revalidatePath("/kpi");
+}
+
+// --- Refresh KPI on-demand da Zernio (solo admin, niente cron) ---
+
+export async function refreshKpiAction(): Promise<{
+  ok: boolean;
+  error?: string;
+  summary?: IngestSummary;
+}> {
+  const user = await currentUser();
+  if (!user?.isAdmin) return { ok: false, error: "Non autorizzato" };
+  const ctx = await currentContext();
+  if (!ctx) return { ok: false, error: "Nessun workspace" };
+  if (!isConfigured()) return { ok: false, error: "Zernio non configurato" };
+
+  const accounts = await db.socialAccount.findMany({
+    where: scopedWhere(ctx.workspaceId),
+  });
+  if (accounts.length === 0)
+    return { ok: false, error: "Nessun account social collegato" };
+
+  let total: IngestSummary = {
+    measurements: 0,
+    segments: 0,
+    postsMatched: 0,
+    postsMissing: 0,
+  };
+  for (const acc of accounts) {
+    try {
+      const analytics = await fetchAnalytics({
+        profileId: acc.zernioAccountId,
+        platform: acc.platform,
+      });
+      const s = await ingestAnalytics(ctx.workspaceId, analytics, {
+        channel: platformToChannel(acc.platform),
+      });
+      total = {
+        measurements: total.measurements + s.measurements,
+        segments: total.segments + s.segments,
+        postsMatched: total.postsMatched + s.postsMatched,
+        postsMissing: total.postsMissing + s.postsMissing,
+      };
+    } catch (e) {
+      return { ok: false, error: `Zernio: ${(e as Error).message}` };
+    }
+  }
+  revalidatePath("/kpi");
+  return { ok: true, summary: total };
 }

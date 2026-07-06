@@ -8,6 +8,7 @@ import {
   SquaresFour,
   Archive,
   ChartLineUp,
+  NotePencil,
 } from "@phosphor-icons/react";
 
 const NAV = [
@@ -16,6 +17,7 @@ const NAV = [
   { href: "/contenuti", label: "Contenuti", Icon: SquaresFour },
   { href: "/archivio", label: "Archivio", Icon: Archive },
   { href: "/kpi", label: "KPI", Icon: ChartLineUp },
+  { href: "/diario", label: "Diario", Icon: NotePencil },
 ];
 
 export function SidebarNav() {
