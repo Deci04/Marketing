@@ -228,12 +228,14 @@ export function aggregatePerformance(rows: PerfRow[]): AggregatedPerformance {
 export async function getMetricSeries(
   workspaceId: string,
   metric: string,
-  channel?: ChannelFilter
+  channel?: ChannelFilter,
+  window?: { from: Date; to: Date }
 ): Promise<SeriesPoint[]> {
   const rows = await db.measurement.findMany({
     where: scopedWhere(workspaceId, {
       metric,
       ...(channel && channel !== "ALL" ? { channel } : {}),
+      ...(window ? { date: { gte: window.from, lte: window.to } } : {}),
     }),
     orderBy: { date: "asc" },
   });
@@ -294,6 +296,11 @@ export type KpiData = {
   nonFollowerPct: number | null;
   /** Metriche DIRETTE da Zernio (ONDATA 1): 12 insight + profilo, con delta per periodo. */
   directMetrics: Record<MetricKey, DirectMetric>;
+  /** Reach a LIVELLO ACCOUNT (account-insights) per il periodo — fallback quando i post non sono agganciati. */
+  accountReach: number | null;
+  /** Save/Share rate a livello account (saves|shares / reach account), frazione 0..1. */
+  accountSaveRate: number | null;
+  accountShareRate: number | null;
   publishedCount: number;
   valueConversations: {
     id: string;
@@ -403,7 +410,9 @@ export async function getKpiData(
       orderBy: { date: "desc" },
     }),
     Promise.all(
-      CHART_METRICS.map((m) => getMetricSeries(workspaceId, m, filter.channel))
+      CHART_METRICS.map((m) =>
+        getMetricSeries(workspaceId, m, filter.channel, { from: filter.from, to: filter.to })
+      )
     ),
     db.measurement.findMany({
       where: scopedWhere(workspaceId, {
@@ -471,6 +480,12 @@ export async function getKpiData(
     token_days: profileMetric("profile:token_days"),
   };
 
+  // Rate a livello ACCOUNT dal periodo (account-insights) — usate come fallback nei box
+  // quando i post non sono agganciati a Content (perf.* = 0).
+  const accountReach = directMetrics.reach.value;
+  const accountSaveRate = saveRate(directMetrics.saves.value ?? 0, accountReach);
+  const accountShareRate = shareRate(directMetrics.shares.value ?? 0, accountReach);
+
   return {
     filter: { period: filter.period, channel: filter.channel },
     perf,
@@ -483,6 +498,9 @@ export async function getKpiData(
     reachRate: reachRateVal,
     nonFollowerPct,
     directMetrics,
+    accountReach,
+    accountSaveRate,
+    accountShareRate,
     publishedCount: contents.filter((c) => c.publishAt != null).length,
     valueConversations: vc.map((c) => ({
       id: c.id,

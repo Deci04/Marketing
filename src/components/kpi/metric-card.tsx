@@ -7,8 +7,12 @@ import {
   DotsThree, ArrowsInSimple, ArrowsOutSimple, Trash,
 } from "@phosphor-icons/react";
 import type { KpiData } from "@/lib/kpi";
-import type { MetricKey } from "@/lib/metric-keys";
+import type { MetricKey, DirectMetric } from "@/lib/metric-keys";
 import { int, deltaFmt } from "./kpi-format";
+
+// Metriche la cui serie si popola col tempo (snapshotter Zernio collegato di recente):
+// quando il valore manca mostriamo "in raccolta" invece di un "—" muto.
+const COLLECTING: ReadonlySet<MetricKey> = new Set(["followers_direct"]);
 
 export const METRIC_META: Record<MetricKey, { label: string; icon: React.ReactNode; unit: "int" | "days" }> = {
   reach: { label: "Reach", icon: <Eye size={16} weight="fill" />, unit: "int" },
@@ -31,13 +35,22 @@ export const METRIC_META: Record<MetricKey, { label: string; icon: React.ReactNo
 
 const TONE_CLASS = { up: "text-sage-ink", down: "text-coral-ink", flat: "text-muted-foreground" } as const;
 
-function DeltaBadge({ deltaPct }: { deltaPct: number | null }) {
-  const { text, tone } = deltaFmt(deltaPct);
-  return <span className={`text-xs font-medium ${TONE_CLASS[tone]}`}>{text}</span>;
+/** Badge delta significativo, o null quando non c'è confronto (finestra prec. assente). */
+function deltaBadge(dm: DirectMetric): { text: string; tone: "up" | "down" | "flat" } | null {
+  if (dm.deltaPct != null) return deltaFmt(dm.deltaPct);
+  // prev = 0 e valore attuale > 0 → "nuovo" (crescita da zero, pct non calcolabile)
+  if (dm.deltaAbs != null && dm.deltaAbs > 0 && (dm.value ?? 0) > 0) return { text: "nuovo", tone: "up" };
+  return null;
+}
+
+function DeltaBadge({ dm }: { dm: DirectMetric }) {
+  const b = deltaBadge(dm);
+  if (!b) return null;
+  return <span className={`text-xs font-medium ${TONE_CLASS[b.tone]}`}>{b.text}</span>;
 }
 
 function fmtVal(key: MetricKey, value: number | null): string {
-  if (value == null) return "—";
+  if (value == null) return COLLECTING.has(key) ? "in raccolta" : "—";
   if (METRIC_META[key].unit === "days") return `${Math.round(value)}g`;
   return int(value);
 }
@@ -75,30 +88,48 @@ export function MetricCard({
       </div>
 
       {single ? (
-        <div className="mt-1 flex flex-1 flex-col justify-center">
-          <div className="flex items-end justify-between gap-2">
-            <span className="text-3xl font-semibold text-ink">{fmtVal(metrics[0], dm(metrics[0]).value)}</span>
-            <span className="text-muted-foreground">{METRIC_META[metrics[0]].icon}</span>
-          </div>
-          <div className="mt-2">
-            <DeltaBadge deltaPct={dm(metrics[0]).deltaPct} />{" "}
-            <span className="text-xs text-muted-foreground">vs periodo prec.</span>
-          </div>
-        </div>
+        (() => {
+          const m = metrics[0];
+          const d = dm(m);
+          const collecting = d.value == null && COLLECTING.has(m);
+          const badge = deltaBadge(d);
+          return (
+            <div className="mt-1 flex flex-1 flex-col justify-center">
+              <div className="flex items-end justify-between gap-2">
+                <span className={`font-semibold text-ink ${collecting ? "text-lg" : "text-3xl"}`}>
+                  {fmtVal(m, d.value)}
+                </span>
+                <span className="text-muted-foreground">{METRIC_META[m].icon}</span>
+              </div>
+              {badge && (
+                <div className="mt-2">
+                  <DeltaBadge dm={d} />{" "}
+                  <span className="text-xs text-muted-foreground">vs periodo prec.</span>
+                </div>
+              )}
+            </div>
+          );
+        })()
       ) : (
         <div className="mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto">
-          {metrics.map((m) => (
-            <div key={m} className="flex items-center justify-between gap-2 text-sm">
-              <span className="flex items-center gap-1.5 text-muted-foreground">
-                {METRIC_META[m].icon}
-                {METRIC_META[m].label}
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="tabular-nums text-ink">{fmtVal(m, dm(m).value)}</span>
-                <DeltaBadge deltaPct={dm(m).deltaPct} />
-              </span>
-            </div>
-          ))}
+          {metrics.map((m) => {
+            const d = dm(m);
+            const collecting = d.value == null && COLLECTING.has(m);
+            return (
+              <div key={m} className="flex items-center justify-between gap-2 text-sm">
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  {METRIC_META[m].icon}
+                  {METRIC_META[m].label}
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className={collecting ? "text-xs text-muted-foreground" : "tabular-nums text-ink"}>
+                    {fmtVal(m, d.value)}
+                  </span>
+                  <DeltaBadge dm={d} />
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 

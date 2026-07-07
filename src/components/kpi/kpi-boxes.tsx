@@ -149,7 +149,7 @@ export function KpiBox({
           <StatShell
             label="Save rate"
             icon={<BookmarkSimple size={18} weight="fill" />}
-            value={pct(data.perf.saveRate, 2)}
+            value={pct(data.perf.saveRate ?? data.accountSaveRate, 2)}
             hint="saves / reach"
           />
         </div>
@@ -161,7 +161,7 @@ export function KpiBox({
           <StatShell
             label="Share rate"
             icon={<ShareNetwork size={18} weight="fill" />}
-            value={pct(data.perf.shareRate, 2)}
+            value={pct(data.perf.shareRate ?? data.accountShareRate, 2)}
             hint="shares / reach"
           />
         </div>
@@ -174,10 +174,12 @@ export function KpiBox({
             <span className="text-xs text-muted-foreground">Reach + % non-follower</span>
             <span className="text-muted-foreground"><Eye size={18} weight="fill" /></span>
           </div>
-          <div className="mt-1 text-3xl font-semibold text-ink">{int(data.perf.totalReach)}</div>
+          <div className="mt-1 text-3xl font-semibold text-ink">
+            {int(data.perf.totalReach || data.accountReach)}
+          </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span>{pctFromPercent(data.nonFollowerPct)} non-follower</span>
-            <span>reach rate {ratio(data.reachRate)}</span>
+            {data.reachRate != null && <span>reach rate {ratio(data.reachRate)}</span>}
           </div>
         </div>
       );
