@@ -10,8 +10,15 @@ import {
   ingestAnalytics,
   isConfigured,
   platformToChannel,
+  fetchAccountInsights,
+  fetchAccountProfile,
+  mapDirectInsights,
+  mapProfile,
+  writeDirectMeasurements,
   type IngestSummary,
+  type InsightWindow,
 } from "@/lib/zernio";
+import { PERIOD_PRESETS } from "@/lib/kpi";
 import type { Channel, Prisma } from "@prisma/client";
 
 function num(v: FormDataEntryValue | null): number | null {
@@ -312,6 +319,33 @@ export async function refreshKpiAction(): Promise<{
         postsMatched: total.postsMatched + s.postsMatched,
         postsMissing: total.postsMissing + s.postsMissing,
       };
+
+      // --- Diretti (ONDATA 1): account-insights per periodo + profilo ---
+      if (acc.platform === "INSTAGRAM") {
+        const now = new Date();
+        const to = now.toISOString().slice(0, 10);
+        const ymd = (d: Date) => d.toISOString().slice(0, 10);
+        const windows: InsightWindow[] = [];
+        for (const period of PERIOD_PRESETS) {
+          const eff = Math.min(period, 88); // limite finestra Zernio
+          const curSince = ymd(new Date(now.getTime() - eff * 86_400_000));
+          const prevUntil = curSince;
+          const prevSince = ymd(new Date(now.getTime() - 2 * eff * 86_400_000));
+          const [current, previous] = await Promise.all([
+            fetchAccountInsights(acc.zernioAccountId, curSince, to),
+            fetchAccountInsights(acc.zernioAccountId, prevSince, prevUntil),
+          ]);
+          windows.push({ period, current, previous });
+        }
+        const profile = await fetchAccountProfile(acc.zernioAccountId);
+        const channel = platformToChannel(acc.platform);
+        const snapDate = new Date(`${to}T00:00:00.000Z`);
+        const written = await writeDirectMeasurements(ctx.workspaceId, [
+          ...mapDirectInsights(windows, channel, snapDate),
+          ...mapProfile(profile, channel, snapDate),
+        ]);
+        total = { ...total, measurements: total.measurements + written };
+      }
     } catch (e) {
       return { ok: false, error: `Zernio: ${(e as Error).message}` };
     }
