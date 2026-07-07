@@ -25,6 +25,46 @@ export type KpiFilter = {
 export const PERIOD_PRESETS = [7, 30, 90] as const;
 export type PeriodDays = (typeof PERIOD_PRESETS)[number];
 
+// --- Metriche DIRETTE da Zernio account-insights (ONDATA 1) ---
+
+export const INSIGHT_KEYS = [
+  "reach", "views", "accounts_engaged", "total_interactions",
+  "likes", "comments", "saves", "shares", "replies", "reposts",
+  "follows_and_unfollows", "profile_links_taps",
+] as const;
+export type InsightKey = (typeof INSIGHT_KEYS)[number];
+
+export const PROFILE_KEYS = ["followers_direct", "following", "media", "token_days"] as const;
+export type ProfileKey = (typeof PROFILE_KEYS)[number];
+
+export type MetricKey = InsightKey | ProfileKey;
+
+export type DirectMetric = {
+  value: number | null;
+  deltaAbs: number | null;
+  deltaPct: number | null;
+};
+
+/** Legge le righe Measurement namespaced `insight:<key>:p<period>:cur|:prev` → delta per metrica. */
+export function readInsightDeltas(
+  rows: { metric: string; value: number }[],
+  period: number
+): Record<InsightKey, DirectMetric> {
+  const byMetric = new Map<string, number>();
+  for (const r of rows) byMetric.set(r.metric, r.value);
+  const out = {} as Record<InsightKey, DirectMetric>;
+  for (const key of INSIGHT_KEYS) {
+    const cur = byMetric.get(`insight:${key}:p${period}:cur`);
+    const prev = byMetric.get(`insight:${key}:p${period}:prev`);
+    const value = cur ?? null;
+    const deltaAbs = cur != null && prev != null ? cur - prev : null;
+    const deltaPct =
+      cur != null && prev != null && prev !== 0 ? ((cur - prev) / prev) * 100 : null;
+    out[key] = { value, deltaAbs, deltaPct };
+  }
+  return out;
+}
+
 /** Build a {from,to} window ending today, going back `days` days. */
 export function periodWindow(days: number, now: Date = new Date()): {
   from: Date;
