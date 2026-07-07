@@ -64,6 +64,16 @@ export function DashboardGrid({
   const [editor, setEditor] = useState<EditorKind>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Merge-per-trascinamento: tieni una card sopra un'altra ~3s → si fondono.
+  const srcRef = useRef<string | null>(null);
+  const targetRef = useRef<string | null>(null);
+  const armedRef = useRef<string | null>(null);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const justMergedRef = useRef(false);
+  const [mergeUI, setMergeUI] = useState<{ target: string | null; armed: boolean }>({
+    target: null,
+    armed: false,
+  });
 
   // Measure container width client-side (react-grid-layout v2 needs explicit width).
   useEffect(() => {
@@ -90,6 +100,12 @@ export function DashboardGrid({
 
   const onLayoutChange = useCallback(
     (next: Layout) => {
+      // Dopo un merge, RGL emette ancora l'onLayoutChange col drop position della card
+      // sorgente (ormai rimossa): scartalo una volta per non re-inserirla.
+      if (justMergedRef.current) {
+        justMergedRef.current = false;
+        return;
+      }
       setLayout((prev) => {
         const merged: StoredLayout = {
           hidden: prev.hidden,
@@ -163,10 +179,6 @@ export function DashboardGrid({
     [persist]
   );
   const applySplit = useCallback((id: string) => applyTransform((l) => splitCard(l, id)), [applyTransform]);
-  const applyMerge = useCallback(
-    (src: string, dst: string) => applyTransform((l) => mergeCards(l, src, dst)),
-    [applyTransform]
-  );
   const applyRemove = useCallback(
     (id: string) => {
       applyTransform((l) => removeMetricCard(l, id));
@@ -189,6 +201,83 @@ export function DashboardGrid({
       ),
     [layout.metricCards]
   );
+
+  // --- Merge per trascinamento (hold ~3s) ---
+  const HOLD_MS = 3000;
+  const clearHold = useCallback(() => {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  }, []);
+  const setMergeTarget = useCallback(
+    (targetId: string | null) => {
+      if (targetRef.current === targetId) return;
+      targetRef.current = targetId;
+      armedRef.current = null;
+      clearHold();
+      setMergeUI({ target: targetId, armed: false });
+      if (targetId) {
+        holdTimer.current = setTimeout(() => {
+          armedRef.current = targetId;
+          setMergeUI({ target: targetId, armed: true });
+        }, HOLD_MS);
+      }
+    },
+    [clearHold]
+  );
+  const onDragStart = useCallback(
+    (_l: Layout, oldItem: LayoutItem | null) => {
+      srcRef.current = oldItem?.i.startsWith("mc:") ? oldItem.i : null;
+      targetRef.current = null;
+      armedRef.current = null;
+      clearHold();
+      setMergeUI({ target: null, armed: false });
+    },
+    [clearHold]
+  );
+  const onDrag = useCallback(
+    (gridLayout: Layout, _o: LayoutItem | null, newItem: LayoutItem | null) => {
+      const src = srcRef.current;
+      if (!src || !newItem) {
+        setMergeTarget(null);
+        return;
+      }
+      let best: string | null = null;
+      let bestArea = 0;
+      for (const it of gridLayout) {
+        if (it.i === src || !it.i.startsWith("mc:")) continue;
+        const ix = Math.max(0, Math.min(newItem.x + newItem.w, it.x + it.w) - Math.max(newItem.x, it.x));
+        const iy = Math.max(0, Math.min(newItem.y + newItem.h, it.y + it.h) - Math.max(newItem.y, it.y));
+        const area = ix * iy;
+        if (area > bestArea) {
+          bestArea = area;
+          best = it.i;
+        }
+      }
+      const need = newItem.w * newItem.h * 0.3; // richiedi >30% di sovrapposizione
+      setMergeTarget(bestArea >= need ? best : null);
+    },
+    [setMergeTarget]
+  );
+  const onDragStop = useCallback(() => {
+    const src = srcRef.current;
+    const armed = armedRef.current;
+    clearHold();
+    targetRef.current = null;
+    armedRef.current = null;
+    srcRef.current = null;
+    setMergeUI({ target: null, armed: false });
+    if (src && armed && src !== armed) {
+      justMergedRef.current = true; // ignora il prossimo onLayoutChange (posizione del drop)
+      setLayout((prev) => {
+        const next = mergeCards(prev, src, armed);
+        persist(next);
+        return next;
+      });
+      toast.success("Card unite");
+    }
+  }, [clearHold, persist]);
 
   const resetLayout = useCallback(async () => {
     setLayout(defaultLayout());
@@ -225,6 +314,9 @@ export function DashboardGrid({
             dragConfig={{ cancel: ".kpi-no-drag" }}
             compactor={verticalCompactor}
             onLayoutChange={onLayoutChange}
+            onDragStart={onDragStart}
+            onDrag={onDrag}
+            onDragStop={onDragStop}
           >
             {visibleItems.map((it) => {
               const isMetric = it.i.startsWith("mc:");
@@ -232,7 +324,7 @@ export function DashboardGrid({
               return (
                 <div key={it.i} className="group/box relative">
                   <div className="absolute -top-1 right-1 z-20 flex translate-y-1 items-center gap-1 opacity-0 transition-opacity group-hover/box:opacity-100">
-                    <span className="kpi-drag-handle cursor-grab rounded-full bg-ink/80 p-1 text-cream active:cursor-grabbing">
+                    <span className="kpi-drag-handle cursor-grab rounded-full border border-border bg-paper p-1 text-ink/55 shadow-[0_1px_3px_rgba(26,24,19,0.10)] transition-colors hover:bg-secondary hover:text-ink active:cursor-grabbing">
                       <DotsSixVertical size={13} />
                     </span>
                     {!isMetric && (
@@ -240,7 +332,7 @@ export function DashboardGrid({
                         onClick={() => hideBox(it.i as BoxId)}
                         onMouseDown={(e) => e.stopPropagation()}
                         aria-label="Nascondi box"
-                        className="kpi-no-drag rounded-full bg-ink/80 p-1 text-cream hover:bg-ink"
+                        className="kpi-no-drag rounded-full border border-border bg-paper p-1 text-ink/55 shadow-[0_1px_3px_rgba(26,24,19,0.10)] transition-colors hover:bg-secondary hover:text-ink"
                       >
                         <EyeSlash size={13} />
                       </button>
@@ -255,10 +347,9 @@ export function DashboardGrid({
                         title={card.metrics.length > 1 ? metricCardTitle(card) : undefined}
                         onSplit={applySplit}
                         onRemove={applyRemove}
-                        onMergeInto={applyMerge}
-                        otherCards={layout.metricCards
-                          .filter((m) => m.i !== card.i)
-                          .map((m) => ({ i: m.i, label: metricCardTitle(m) }))}
+                        mergeState={
+                          mergeUI.target === card.i ? (mergeUI.armed ? "armed" : "hover") : null
+                        }
                       />
                     ) : (
                       <KpiBox id={it.i as BoxId} data={data} onManage={setEditor} />

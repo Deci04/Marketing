@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   Eye, ChartLineUp, UsersThree, Pulse, Heart, ChatCircleDots, BookmarkSimple,
   ShareNetwork, ArrowBendUpLeft, Repeat, UserPlus, LinkSimple, Users, ImageSquare, Clock,
-  DotsThree, ArrowsInSimple, ArrowsOutSimple, Trash,
+  DotsThree, ArrowsOutSimple, Trash,
 } from "@phosphor-icons/react";
 import type { KpiData } from "@/lib/kpi";
 import type { MetricKey, DirectMetric } from "@/lib/metric-keys";
@@ -56,7 +56,7 @@ function fmtVal(key: MetricKey, value: number | null): string {
 }
 
 export function MetricCard({
-  cardId, metrics, data, title, onSplit, onRemove, onMergeInto, otherCards,
+  cardId, metrics, data, title, onSplit, onRemove, mergeState,
 }: {
   cardId: string;
   metrics: MetricKey[];
@@ -64,15 +64,34 @@ export function MetricCard({
   title?: string;
   onSplit: (id: string) => void;
   onRemove: (id: string) => void;
-  onMergeInto: (srcId: string, dstId: string) => void;
-  otherCards: { i: string; label: string }[];
+  /** Feedback visivo quando un'altra card è trascinata sopra questa (merge per drag). */
+  mergeState?: "hover" | "armed" | null;
 }) {
   const [menu, setMenu] = useState(false);
   const single = metrics.length === 1;
   const dm = (m: MetricKey) => data.directMetrics?.[m] ?? { value: null, deltaAbs: null, deltaPct: null };
 
   return (
-    <div className="relative flex h-full flex-col rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(26,24,19,0.04)]">
+    <div
+      className={`relative flex h-full flex-col rounded-2xl border bg-card p-4 shadow-[0_1px_2px_rgba(26,24,19,0.04)] transition-[box-shadow,border-color] ${
+        mergeState === "armed"
+          ? "border-sage-ink ring-2 ring-sage-ink/60"
+          : mergeState === "hover"
+            ? "border-border ring-2 ring-border"
+            : "border-border"
+      }`}
+    >
+      {mergeState && (
+        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-paper/70 backdrop-blur-[1px]">
+          <span
+            className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+              mergeState === "armed" ? "bg-sage text-sage-ink" : "bg-secondary text-muted-foreground"
+            }`}
+          >
+            {mergeState === "armed" ? "Rilascia per unire" : "Tieni fermo per unire…"}
+          </span>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground">
           {title ?? (single ? METRIC_META[metrics[0]].label : "Metriche")}
@@ -146,18 +165,9 @@ export function MetricCard({
               <ArrowsOutSimple size={14} /> Dividi in singoli
             </button>
           )}
-          {otherCards.length > 0 && (
-            <div className="px-2 py-1 text-[11px] text-muted-foreground">Unisci a…</div>
-          )}
-          {otherCards.map((c) => (
-            <button
-              key={c.i}
-              onClick={() => { onMergeInto(cardId, c.i); setMenu(false); }}
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-secondary"
-            >
-              <ArrowsInSimple size={14} /> <span className="truncate">{c.label}</span>
-            </button>
-          ))}
+          <div className="px-2 py-1 text-[11px] text-muted-foreground">
+            Per unire: trascina una card sopra un&apos;altra e tienila ferma.
+          </div>
           <button
             onClick={() => { onRemove(cardId); setMenu(false); }}
             className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-coral-ink hover:bg-secondary"
