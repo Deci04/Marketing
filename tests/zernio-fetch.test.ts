@@ -120,7 +120,9 @@ describe("fetchAnalytics", () => {
 
     // Demografiche: country → geo.
     const dims = new Set(out.demographics.map((d) => d.dimension));
-    expect(dims).toEqual(new Set(["age", "gender", "geo"]));
+    // Ora fetchDemographics fa due chiamate (follower + engaged) → oltre a age/gender/geo
+    // compaiono anche age_engaged/gender_engaged (il mock serve gli stessi dati per entrambe).
+    expect(dims).toEqual(new Set(["age", "gender", "geo", "age_engaged", "gender_engaged"]));
     expect(out.demographics.find((d) => d.dimension === "geo")?.label).toBe("IT");
 
     // Per-post: externalId = latePostId, comments mappati.

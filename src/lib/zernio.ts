@@ -87,6 +87,11 @@ type ZernioAccountsListResponse = {
   accounts: ZernioApiAccount[];
   hasAnalyticsAccess?: boolean;
 };
+// Forma estesa del singolo account (profilo/token) usata da fetchAccountProfile.
+type ZernioApiAccountFull = ZernioApiAccount & {
+  tokenExpiresAt?: string;
+  metadata?: { profileData?: { extraData?: { followsCount?: number; mediaCount?: number } } };
+};
 // GET /v1/accounts/follower-stats → { stats: { <accountId>: [{date, followers}] } }
 type ZernioFollowerStatsResponse = {
   stats?: Record<string, { date: string; followers: number }[]>;
@@ -357,6 +362,61 @@ async function fetchPostMetrics(
   }
 }
 
+// --- Fetcher diretti (ONDATA 1): account-insights (12 metriche) + profilo ---
+
+const INSIGHT_METRICS_CSV = INSIGHT_KEYS.join(",");
+
+/** Legge i total_value delle 12 metriche account-insights per la finestra [since, until] (YMD). */
+export async function fetchAccountInsights(
+  accountId: string,
+  since: string,
+  until: string
+): Promise<Partial<Record<InsightKey, number>>> {
+  const out: Partial<Record<InsightKey, number>> = {};
+  try {
+    const q = new URLSearchParams({
+      accountId,
+      metrics: INSIGHT_METRICS_CSV,
+      metricType: "total_value",
+      since,
+      until,
+    });
+    const res = await zernioFetch<ZernioAccountInsightsResponse>(
+      `/analytics/instagram/account-insights?${q.toString()}`
+    );
+    for (const key of INSIGHT_KEYS) {
+      const total = res.metrics?.[key]?.total;
+      if (typeof total === "number") out[key] = total;
+    }
+  } catch (e) {
+    console.warn(`[zernio] account-insights (${since}..${until}) non disponibile: ${(e as Error).message}`);
+  }
+  return out;
+}
+
+/** Snapshot profilo: following, media count, giorni alla scadenza token. */
+export async function fetchAccountProfile(accountId: string): Promise<AccountProfile> {
+  try {
+    const res = await zernioFetch<{ accounts?: ZernioApiAccountFull[] }>(`/accounts`);
+    const acc = res.accounts?.find((a) => a._id === accountId) ?? res.accounts?.[0];
+    if (!acc) return { following: null, mediaCount: null, tokenDays: null };
+    const extra = acc.metadata?.profileData?.extraData ?? {};
+    const expiresAt = acc.tokenExpiresAt ? Date.parse(acc.tokenExpiresAt) : null;
+    const tokenDays =
+      expiresAt != null && !Number.isNaN(expiresAt)
+        ? Math.max(0, Math.round((expiresAt - Date.now()) / 86_400_000))
+        : null;
+    return {
+      following: typeof extra.followsCount === "number" ? extra.followsCount : null,
+      mediaCount: typeof extra.mediaCount === "number" ? extra.mediaCount : null,
+      tokenDays,
+    };
+  } catch (e) {
+    console.warn(`[zernio] account profile non disponibile: ${(e as Error).message}`);
+    return { following: null, mediaCount: null, tokenDays: null };
+  }
+}
+
 // --- Mapper puri raw-Zernio → record-KPI (Task 2, unit-testabili senza rete) ---
 
 export function ymdToUtcMidnight(ymd: string): Date {
@@ -490,6 +550,26 @@ export function mapPostMetrics(p: ZernioPostMetrics): ContentPerfPatch {
     followsGenerated: null,
     nonFollowerPct: null,
   };
+}
+
+/** Scrive righe Measurement "dirette" (insight:*, profile:*) in modo idempotente:
+ *  cancella TUTTE le righe della stessa `metric` (Luca) poi ricrea. Evita l'accumulo di
+ *  righe datate a refresh successivi (a differenza del delete-per-data di ingestAnalytics). */
+export async function writeDirectMeasurements(
+  workspaceId: string,
+  upserts: MeasurementUpsert[]
+): Promise<number> {
+  if (upserts.length === 0) return 0;
+  const metrics = [...new Set(upserts.map((u) => u.metric))];
+  await db.$transaction([
+    ...metrics.map((m) =>
+      db.measurement.deleteMany({
+        where: scopedWhere(workspaceId, { metric: m, series: "Luca" }),
+      })
+    ),
+    ...upserts.map((u) => db.measurement.create({ data: { ...u, workspaceId } })),
+  ]);
+  return upserts.length;
 }
 
 // --- Ingestione idempotente nel DB (Task 3) — unica funzione che scrive ---
