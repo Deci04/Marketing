@@ -111,31 +111,34 @@
   }
 }
 
-/* --- KPI dashboard: react-grid-layout, allineato all'identità del software --- */
-.react-grid-item.cssTransforms {
-  transition-property: transform, width, height;
-  transition: transform 240ms cubic-bezier(0.2, 0, 0, 1),
-    width 240ms cubic-bezier(0.2, 0, 0, 1),
-    height 240ms cubic-bezier(0.2, 0, 0, 1);
+/* --- KPI dashboard: react-grid-layout, allineato all'identità del software ---
+   NB: si anima SOLO la posizione (transform). Animare width/height farebbe cambiare
+   di continuo la dimensione dei box durante il reflow → il ResizeObserver di Recharts
+   (ResponsiveContainer nel grafico) va in loop ("Maximum update depth exceeded").
+   Selettori prefissati con `.layout` (className del GridLayout) per vincere in specificità
+   sulla CSS della libreria, importata dopo. */
+.layout .react-grid-item.cssTransforms {
+  transition-property: transform;
+  transition: transform 220ms cubic-bezier(0.2, 0, 0, 1);
 }
-.react-grid-item.react-draggable-dragging {
+.layout .react-grid-item.resizing,
+.layout .react-grid-item.react-draggable-dragging,
+.layout .react-grid-item.dropping {
   transition: none;
+}
+.layout .react-grid-item.react-draggable-dragging {
   z-index: 30;
   cursor: grabbing;
 }
-/* scala/ombra sull'INNER wrapper (non sul grid-item, per non rompere il transform di RGL) */
-.react-grid-item.react-draggable-dragging > * {
+/* ombra di sollevamento sull'INNER wrapper (nessuno scale: cambierebbe la dimensione
+   del contenuto e farebbe ripartire il loop di resize del grafico) */
+.layout .react-grid-item.react-draggable-dragging > * {
   box-shadow: 0 18px 44px rgba(26, 24, 19, 0.20);
-  transform: scale(1.015);
-  transition: transform 140ms ease, box-shadow 140ms ease;
   border-radius: 1rem;
 }
-.react-grid-item.dropping {
-  transition: none;
-}
-/* placeholder: da 'background: red' di default a un contorno tratteggiato brand */
-.react-grid-item.react-grid-placeholder {
-  background: var(--secondary);
+/* placeholder: da 'background: red' di default a contorno tratteggiato brand */
+.layout .react-grid-item.react-grid-placeholder {
+  background: var(--secondary) !important;
   opacity: 0.5;
   border: 2px dashed var(--border);
   border-radius: 1rem;

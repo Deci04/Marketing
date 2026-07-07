@@ -19,6 +19,7 @@ import "react-resizable/css/styles.css";
 import type { KpiData } from "@/lib/kpi";
 import {
   BOX_CATALOG,
+  ALL_BOX_IDS,
   normalizeLayout,
   defaultLayout,
   splitCard,
@@ -27,6 +28,7 @@ import {
   removeMetricCard,
   type BoxId,
   type StoredLayout,
+  type GridItem,
 } from "@/lib/dashboard-config";
 import { INSIGHT_KEYS, PROFILE_KEYS, type MetricKey } from "@/lib/metric-keys";
 import { KpiBox } from "./kpi/kpi-boxes";
@@ -39,6 +41,17 @@ const METRIC_CARD_TITLES: Record<string, string> = {
 };
 function metricCardTitle(card: { i: string; metrics: MetricKey[] }): string {
   return METRIC_CARD_TITLES[card.i] ?? METRIC_META[card.metrics[0]]?.label ?? "Metriche";
+}
+
+/** Confronta due liste di item per posizione/dimensione (ignora minW/minH). */
+function sameItems(a: GridItem[], b: GridItem[]): boolean {
+  if (a.length !== b.length) return false;
+  const map = new Map(a.map((it) => [it.i, it]));
+  for (const it of b) {
+    const p = map.get(it.i);
+    if (!p || p.x !== it.x || p.y !== it.y || p.w !== it.w || p.h !== it.h) return false;
+  }
+  return true;
 }
 import {
   saveDashboardLayoutAction,
@@ -69,7 +82,6 @@ export function DashboardGrid({
   const targetRef = useRef<string | null>(null);
   const armedRef = useRef<string | null>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const justMergedRef = useRef(false);
   const [mergeUI, setMergeUI] = useState<{ target: string | null; armed: boolean }>({
     target: null,
     armed: false,
@@ -100,17 +112,15 @@ export function DashboardGrid({
 
   const onLayoutChange = useCallback(
     (next: Layout) => {
-      // Dopo un merge, RGL emette ancora l'onLayoutChange col drop position della card
-      // sorgente (ormai rimossa): scartalo una volta per non re-inserirla.
-      if (justMergedRef.current) {
-        justMergedRef.current = false;
-        return;
-      }
       setLayout((prev) => {
-        const merged: StoredLayout = {
-          hidden: prev.hidden,
-          metricCards: prev.metricCards,
-          items: next.map((n: LayoutItem) => {
+        // Tieni solo box legacy noti o metric card ancora esistenti: dopo un merge la card
+        // sorgente sparisce da metricCards, quindi un onLayoutChange che la porta ancora
+        // (drop position) NON la re-inserisce. Robusto senza flag/skip.
+        const known = (i: string) =>
+          ALL_BOX_IDS.includes(i as BoxId) || prev.metricCards.some((c) => c.i === i);
+        const nextItems = next
+          .filter((n) => known(n.i))
+          .map((n: LayoutItem) => {
             const old = prev.items.find((p) => p.i === n.i);
             return {
               i: n.i,
@@ -121,7 +131,13 @@ export function DashboardGrid({
               minW: old?.minW ?? 2,
               minH: old?.minH ?? 2,
             };
-          }),
+          });
+        // Nessun cambiamento reale → non aggiornare lo stato (evita loop di render con RGL).
+        if (sameItems(prev.items, nextItems)) return prev;
+        const merged: StoredLayout = {
+          hidden: prev.hidden,
+          metricCards: prev.metricCards,
+          items: nextItems,
         };
         persist(merged);
         return merged;
@@ -269,7 +285,8 @@ export function DashboardGrid({
     srcRef.current = null;
     setMergeUI({ target: null, armed: false });
     if (src && armed && src !== armed) {
-      justMergedRef.current = true; // ignora il prossimo onLayoutChange (posizione del drop)
+      // La card sorgente sparisce da metricCards: onLayoutChange (drop) la scarta da solo
+      // grazie al filtro `known()`, quindi niente flag/skip qui.
       setLayout((prev) => {
         const next = mergeCards(prev, src, armed);
         persist(next);
