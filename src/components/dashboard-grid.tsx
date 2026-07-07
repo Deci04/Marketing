@@ -21,11 +21,25 @@ import {
   BOX_CATALOG,
   normalizeLayout,
   defaultLayout,
+  splitCard,
+  mergeCards,
+  addMetricCard,
+  removeMetricCard,
   type BoxId,
   type StoredLayout,
 } from "@/lib/dashboard-config";
+import { INSIGHT_KEYS, PROFILE_KEYS, type MetricKey } from "@/lib/kpi";
 import { KpiBox } from "./kpi/kpi-boxes";
+import { MetricCard, METRIC_META } from "./kpi/metric-card";
 import { KpiEditors, type EditorKind } from "./kpi/kpi-editors";
+
+const METRIC_CARD_TITLES: Record<string, string> = {
+  "mc:interazioni": "Interazioni",
+  "mc:profilo": "Profilo & salute",
+};
+function metricCardTitle(card: { i: string; metrics: MetricKey[] }): string {
+  return METRIC_CARD_TITLES[card.i] ?? METRIC_META[card.metrics[0]]?.label ?? "Metriche";
+}
 import {
   saveDashboardLayoutAction,
   resetDashboardLayoutAction,
@@ -79,6 +93,7 @@ export function DashboardGrid({
       setLayout((prev) => {
         const merged: StoredLayout = {
           hidden: prev.hidden,
+          metricCards: prev.metricCards,
           items: next.map((n: LayoutItem) => {
             const old = prev.items.find((p) => p.i === n.i);
             return {
@@ -126,6 +141,7 @@ export function DashboardGrid({
         const next: StoredLayout = {
           items,
           hidden: prev.hidden.filter((h) => h !== id),
+          metricCards: prev.metricCards,
         };
         persist(next);
         return next;
@@ -133,6 +149,45 @@ export function DashboardGrid({
       toast.success("Box aggiunto");
     },
     [persist]
+  );
+
+  // --- Metric card: dividi / unisci / aggiungi / rimuovi ---
+  const applyTransform = useCallback(
+    (fn: (l: StoredLayout) => StoredLayout) => {
+      setLayout((prev) => {
+        const next = fn(prev);
+        persist(next);
+        return next;
+      });
+    },
+    [persist]
+  );
+  const applySplit = useCallback((id: string) => applyTransform((l) => splitCard(l, id)), [applyTransform]);
+  const applyMerge = useCallback(
+    (src: string, dst: string) => applyTransform((l) => mergeCards(l, src, dst)),
+    [applyTransform]
+  );
+  const applyRemove = useCallback(
+    (id: string) => {
+      applyTransform((l) => removeMetricCard(l, id));
+      toast.success("Card rimossa");
+    },
+    [applyTransform]
+  );
+  const applyAddMetric = useCallback(
+    (metric: MetricKey) => {
+      applyTransform((l) => addMetricCard(l, metric));
+      toast.success("Metrica aggiunta");
+    },
+    [applyTransform]
+  );
+
+  const addableMetrics = useMemo(
+    () =>
+      [...INSIGHT_KEYS, ...PROFILE_KEYS].filter(
+        (k) => !layout.metricCards.some((c) => c.metrics.includes(k))
+      ),
+    [layout.metricCards]
   );
 
   const resetLayout = useCallback(async () => {
@@ -171,26 +226,47 @@ export function DashboardGrid({
             compactor={verticalCompactor}
             onLayoutChange={onLayoutChange}
           >
-            {visibleItems.map((it) => (
-              <div key={it.i} className="group/box relative">
-                <div className="absolute -top-1 right-1 z-20 flex translate-y-1 items-center gap-1 opacity-0 transition-opacity group-hover/box:opacity-100">
-                  <span className="kpi-drag-handle cursor-grab rounded-full bg-ink/80 p-1 text-cream active:cursor-grabbing">
-                    <DotsSixVertical size={13} />
-                  </span>
-                  <button
-                    onClick={() => hideBox(it.i as BoxId)}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    aria-label="Nascondi box"
-                    className="kpi-no-drag rounded-full bg-ink/80 p-1 text-cream hover:bg-ink"
-                  >
-                    <EyeSlash size={13} />
-                  </button>
+            {visibleItems.map((it) => {
+              const isMetric = it.i.startsWith("mc:");
+              const card = isMetric ? layout.metricCards.find((m) => m.i === it.i) : null;
+              return (
+                <div key={it.i} className="group/box relative">
+                  <div className="absolute -top-1 right-1 z-20 flex translate-y-1 items-center gap-1 opacity-0 transition-opacity group-hover/box:opacity-100">
+                    <span className="kpi-drag-handle cursor-grab rounded-full bg-ink/80 p-1 text-cream active:cursor-grabbing">
+                      <DotsSixVertical size={13} />
+                    </span>
+                    {!isMetric && (
+                      <button
+                        onClick={() => hideBox(it.i as BoxId)}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        aria-label="Nascondi box"
+                        className="kpi-no-drag rounded-full bg-ink/80 p-1 text-cream hover:bg-ink"
+                      >
+                        <EyeSlash size={13} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="h-full overflow-hidden">
+                    {isMetric && card ? (
+                      <MetricCard
+                        cardId={card.i}
+                        metrics={card.metrics}
+                        data={data}
+                        title={card.metrics.length > 1 ? metricCardTitle(card) : undefined}
+                        onSplit={applySplit}
+                        onRemove={applyRemove}
+                        onMergeInto={applyMerge}
+                        otherCards={layout.metricCards
+                          .filter((m) => m.i !== card.i)
+                          .map((m) => ({ i: m.i, label: metricCardTitle(m) }))}
+                      />
+                    ) : (
+                      <KpiBox id={it.i as BoxId} data={data} onManage={setEditor} />
+                    )}
+                  </div>
                 </div>
-                <div className="h-full overflow-hidden">
-                  <KpiBox id={it.i as BoxId} data={data} onManage={setEditor} />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </GridLayout>
         )}
         {width === 0 && (
@@ -210,28 +286,59 @@ export function DashboardGrid({
                 <X size={16} />
               </button>
             </div>
-            {hiddenBoxes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Tutti i box sono già visibili.</p>
-            ) : (
-              <div className="space-y-2">
-                {hiddenBoxes.map((b) => (
-                  <button
-                    key={b.id}
-                    onClick={() => {
-                      addBox(b.id);
-                      setCatalogOpen(false);
-                    }}
-                    className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3 text-left transition-colors hover:bg-secondary"
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-ink">{b.title}</div>
-                      <div className="text-xs text-muted-foreground">{b.description}</div>
-                    </div>
-                    <Plus size={16} weight="bold" className="shrink-0 text-ink" />
-                  </button>
-                ))}
+            <div className="max-h-[60vh] space-y-4 overflow-y-auto">
+              <div>
+                <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Metriche dirette</div>
+                {addableMetrics.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Tutte le metriche sono già in una card.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {addableMetrics.map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => {
+                          applyAddMetric(m);
+                          setCatalogOpen(false);
+                        }}
+                        className="flex items-center justify-between gap-2 rounded-2xl border border-border bg-card p-2.5 text-left transition-colors hover:bg-secondary"
+                      >
+                        <span className="flex items-center gap-1.5 text-sm text-ink">
+                          {METRIC_META[m].icon}
+                          <span className="truncate">{METRIC_META[m].label}</span>
+                        </span>
+                        <Plus size={14} weight="bold" className="shrink-0 text-ink" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+
+              <div>
+                <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Box</div>
+                {hiddenBoxes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Tutti i box sono già visibili.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {hiddenBoxes.map((b) => (
+                      <button
+                        key={b.id}
+                        onClick={() => {
+                          addBox(b.id);
+                          setCatalogOpen(false);
+                        }}
+                        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3 text-left transition-colors hover:bg-secondary"
+                      >
+                        <div>
+                          <div className="text-sm font-medium text-ink">{b.title}</div>
+                          <div className="text-xs text-muted-foreground">{b.description}</div>
+                        </div>
+                        <Plus size={16} weight="bold" className="shrink-0 text-ink" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
