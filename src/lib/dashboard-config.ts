@@ -15,7 +15,11 @@ export type BoxId =
   | "vsBenchmark"
   | "funnel"
   | "audienceType"
-  | "audienceUsage";
+  | "audienceUsage"
+  | "postRanking"
+  | "bestTime"
+  | "postingFrequency"
+  | "contentDecay";
 
 export type BoxMeta = {
   id: BoxId;
@@ -110,6 +114,34 @@ export const BOX_CATALOG: BoxMeta[] = [
     description: "Orari/attività + new vs returning",
     group: "audience",
     default: { x: 6, y: 15, w: 6, h: 5, minW: 4, minH: 4 },
+  },
+  {
+    id: "postRanking",
+    title: "Classifica post",
+    description: "I tuoi post per reach / ER / watch-time",
+    group: "audience",
+    default: { x: 0, y: 20, w: 6, h: 8, minW: 4, minH: 5 },
+  },
+  {
+    id: "bestTime",
+    title: "Orari migliori",
+    description: "Heatmap giorno × ora (quando pubblicare)",
+    group: "audience",
+    default: { x: 6, y: 20, w: 6, h: 6, minW: 4, minH: 4 },
+  },
+  {
+    id: "postingFrequency",
+    title: "Frequenza vs engagement",
+    description: "La cadenza di pubblicazione ottimale",
+    group: "audience",
+    default: { x: 6, y: 26, w: 6, h: 4, minW: 3, minH: 3 },
+  },
+  {
+    id: "contentDecay",
+    title: "Decadimento contenuti",
+    description: "Quanto reggono i post nel tempo",
+    group: "audience",
+    default: { x: 0, y: 28, w: 6, h: 4, minW: 3, minH: 3 },
   },
 ];
 
