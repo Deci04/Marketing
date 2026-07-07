@@ -26,24 +26,16 @@ export const PERIOD_PRESETS = [7, 30, 90] as const;
 export type PeriodDays = (typeof PERIOD_PRESETS)[number];
 
 // --- Metriche DIRETTE da Zernio account-insights (ONDATA 1) ---
-
-export const INSIGHT_KEYS = [
-  "reach", "views", "accounts_engaged", "total_interactions",
-  "likes", "comments", "saves", "shares", "replies", "reposts",
-  "follows_and_unfollows", "profile_links_taps",
-] as const;
-export type InsightKey = (typeof INSIGHT_KEYS)[number];
-
-export const PROFILE_KEYS = ["followers_direct", "following", "media", "token_days"] as const;
-export type ProfileKey = (typeof PROFILE_KEYS)[number];
-
-export type MetricKey = InsightKey | ProfileKey;
-
-export type DirectMetric = {
-  value: number | null;
-  deltaAbs: number | null;
-  deltaPct: number | null;
-};
+// Costanti/tipi definiti in metric-keys.ts (CLIENT-SAFE); qui re-esportati per i consumer server.
+export {
+  INSIGHT_KEYS,
+  PROFILE_KEYS,
+  type InsightKey,
+  type ProfileKey,
+  type MetricKey,
+  type DirectMetric,
+} from "@/lib/metric-keys";
+import { INSIGHT_KEYS, type InsightKey, type MetricKey, type DirectMetric } from "@/lib/metric-keys";
 
 /** Legge le righe Measurement namespaced `insight:<key>:p<period>:cur|:prev` → delta per metrica. */
 export function readInsightDeltas(

@@ -3,7 +3,7 @@
 import type { Channel } from "@prisma/client";
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
-import { INSIGHT_KEYS, type InsightKey } from "@/lib/kpi";
+import { INSIGHT_KEYS, type InsightKey } from "@/lib/metric-keys";
 
 export const ZERNIO_BASE = "https://zernio.com/api/v1";
 const key = () => process.env.ZERNIO_API_KEY ?? "";

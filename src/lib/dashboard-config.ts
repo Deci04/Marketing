@@ -1,7 +1,7 @@
 // Box catalog + default layout for the movable KPI dashboard.
 // Layout coordinates target a 12-column react-grid-layout.
 
-import type { MetricKey } from "@/lib/kpi";
+import type { MetricKey } from "@/lib/metric-keys";
 
 export type BoxId =
   | "northStar"

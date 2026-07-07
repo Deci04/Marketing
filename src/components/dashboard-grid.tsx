@@ -28,7 +28,7 @@ import {
   type BoxId,
   type StoredLayout,
 } from "@/lib/dashboard-config";
-import { INSIGHT_KEYS, PROFILE_KEYS, type MetricKey } from "@/lib/kpi";
+import { INSIGHT_KEYS, PROFILE_KEYS, type MetricKey } from "@/lib/metric-keys";
 import { KpiBox } from "./kpi/kpi-boxes";
 import { MetricCard, METRIC_META } from "./kpi/metric-card";
 import { KpiEditors, type EditorKind } from "./kpi/kpi-editors";

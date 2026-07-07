@@ -6,7 +6,8 @@ import {
   ShareNetwork, ArrowBendUpLeft, Repeat, UserPlus, LinkSimple, Users, ImageSquare, Clock,
   DotsThree, ArrowsInSimple, ArrowsOutSimple, Trash,
 } from "@phosphor-icons/react";
-import type { KpiData, MetricKey } from "@/lib/kpi";
+import type { KpiData } from "@/lib/kpi";
+import type { MetricKey } from "@/lib/metric-keys";
 import { int, deltaFmt } from "./kpi-format";
 
 export const METRIC_META: Record<MetricKey, { label: string; icon: React.ReactNode; unit: "int" | "days" }> = {
