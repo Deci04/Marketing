@@ -1,33 +1,28 @@
 # 🔻 START HERE — Handoff sessione content-tool
 
-> Ultimo aggiornamento: 2026-07-07. Leggi **prima** questo, poi `2026-07-04-STATO.md` per il dettaglio completo.
+> Ultimo aggiornamento: 2026-07-07 (sera). Leggi **prima** questo, poi `2026-07-04-STATO.md` per il dettaglio storico.
 
 ## Dove sono i lavori
-- **Branch git**: `serata/multi-feature` (NON su `main`). Ultimo commit `21869fa`. **Tutto committato e al sicuro.**
-- **Stato completo**: `docs/superpowers/plans/2026-07-04-STATO.md`
-- **Design**: `docs/superpowers/specs/2026-07-04-serata-multi-feature-design.md`
-- **Runbook subagenti**: `docs/superpowers/plans/2026-07-04-orchestrazione-subagenti.md`
-- **Piani filone**: `docs/superpowers/plans/2026-07-04-{fondamenta,h-home,s-ricerca,z-zernio,t-diario,g-gcal}.md`
+- **Branch git**: KPI **ONDATA 1 + 2 mergiati su `main`** in locale (merge commit `0ad0a02`, **NON pushato** — regola: push solo su richiesta esplicita). Il branch `serata/multi-feature` è tenuto e allineato a main.
+- **Specs/piani ONDATA 1**: `docs/superpowers/specs/2026-07-07-kpi-ondata1-diretti-card-combinabili-design.md` + `docs/superpowers/plans/2026-07-07-kpi-ondata1-diretti-card-combinabili.md`
 - **Inventario dati Zernio**: `docs/superpowers/plans/2026-07-07-zernio-data-inventory.md`
-- **Graphify**: `graphify-out/graph.json` aggiornato — interrogalo prima di greppare.
+- **Graphify**: `graphify-out/graph.json` — interrogalo prima di greppare.
 
 ## Cosa è FATTO e verificato dal vivo ✅
-- 8 filoni (Fondamenta, H home per-ruolo, S ricerca+archivio, T diario/Telegram, Z Zernio KPI, N notifiche, G Google Calendar, W pubblicazione) + coordinamento UI. `tsc` pulito, test verdi.
-- **Google Calendar**: connesso live, uscita (tool→Google) + backfill 27 item verificati.
-- **Zernio**: connesso live (IG di Luca `lucademarco.cf`, 317 follower). KPI reali corretti dopo audit (engagement 7.5%, non-follower 96.7%, demografiche normalizzate a %). Bottone connetti/disconnetti funzionante.
-- H, S, N verificati in browser.
+- **ONDATA 1** — box KPI **diretti da Zernio** (12 metriche `account-insights`) con **delta che segue il periodo** (7/30/90), profilo/salute, demografiche `city` + `engaged`. **Card combinabili**: dividi (menu ⋯) e **unisci trascinando** una card su un'altra e tenendola ~3s. Empty-state puliti; Save/Share rate e Reach+non-follower con **fallback a livello account**. Delta reali verificati (reach p7 −74%). Nessuna migration (namespacing su `Measurement`).
+- **ONDATA 2** — modello **`ZernioSnapshot`** (Json, migration additiva **applicata** su Neon) + `src/lib/zernio-snapshot.ts` (fetcher/mapper puri, TDD). Box: **Classifica post** (thumbnail, reach/ER/watch, ER **ricalcolato** da noi), **Orari migliori** (heatmap giorno×ora), **Frequenza vs engagement**, **Decadimento contenuti**. Snapshot popolato per Luca (12 post, 10 orari, 3 freq, 2 decay).
+- **Fix chiave di sessione**: bundle client/server (`src/lib/metric-keys.ts` per non trascinare googleapis nel client), loop Recharts "Maximum update depth" (CSS: animare solo `transform`, guard `sameItems`), placeholder RGL (selettori lib + `!important`), hydration Grammarly (`suppressHydrationWarning` sul body). Vedi memory `content-tool-known-fixes`.
+- Il grafico "Andamento vs benchmark" ora **segue il periodo** (`getMetricSeries` filtra la finestra).
 
-## PROSSIMO PASSO immediato (riparti da qui) → Redesign box KPI
-Direttiva utente: prima i box **DIRETTI da Zernio**, poi DERIVATI, poi MANUALI. Box movibili invariati. Numero-singolo = **valore + delta vs periodo prima**. Costruire TUTTI i box (inclusi extra).
-- **ONDATA 1**: 12 metriche `account-insights` → `Measurement` (+ delta: fetch finestra corrente + precedente); demografiche `city` + `engaged` → `AudienceSegment`; esporre in `getKpiData`; poi box UI. **No migration.** (Reali Luca: views 41337, accounts_engaged 753, total_interactions 1732, likes 1284, saves 112, shares 131, reposts 24.)
-- **ONDATA 2**: per-post ranking + extra (best-time, posting-frequency, content-decay, watch-time reel, storie, health) → nuovo modello `ZernioSnapshot` (Json, migration additiva deliberata) + box.
-- ⚠️ Nota: i subagenti fallivano per infra sotto stress il 07-07. In sessione fresca: riprovare i subagenti o fare inline a piccoli passi verificati coi dati reali (`npx tsx --env-file=.env` script in `scripts/`).
+## PROSSIMO PASSO
+1. **Se l'utente conferma il visual finale** → si può **pushare `main`** (finora tenuto locale).
+2. **ONDATA 2 residui (data-gated, minori)**: box **storico follower** e **storie** — entrambi tornano vuoti finché lo snapshotter Zernio non matura giorni / non ci sono storie attive. Caption post: il list endpoint la dà vuota (recuperabile dal dettaglio, +1 call/post — nice-to-have).
 
-## Restano (prod-gated) — sessione con DEPLOY
-- Google **entrata** (webhook push), **bot Telegram** (l'utente spiegherà come lo costruisce — DA FARE PER ULTIMO), **W** post reale, **M** mobile, P-findings #3/#4/#5.
+## Restano — prod-gated (sessione con DEPLOY)
+Google **entrata** (webhook push), **bot Telegram** (l'utente spiegherà come lo costruisce — DA FARE PER ULTIMO), **W** post reale su Zernio, **M** mobile/responsive, P-findings #3/#4/#5.
 
 ## Ambiente
-- **DB**: Neon condiviso (dev=prod). Migration additive applicate deliberatamente.
-- **Env**: `.env` locale compilato (Google/Zernio/Telegram/NEXT_PUBLIC_APP_URL) + Vercel prod+dev. Segreti NON in git.
-- **Dev server**: `npm run dev` (localhost:3000). Se giù, riavviare. Fix runtime chiave già applicato: `googleapis` fuori dal bundle client (`chat-describe.ts` + `serverExternalPackages`).
-- **Regole**: tutto locale, commit su branch (mai push/main finché non verificato in prod). Browser-verify prima del merge. Notifica audio ai checkpoint (`afplay Glass.aiff`).
+- **DB**: Neon condiviso (dev=prod). Migration additive applicate deliberatamente (ultima: `ZernioSnapshot`).
+- **Dev server**: `npm run dev` (localhost:3000). **Dopo una migration riavvia il dev E pulisci `.next`** (Turbopack cachea il client Prisma vecchio → `db.<newModel>` undefined). Log dev: `/tmp/content-tool-dev.log`.
+- **Env**: `.env` locale compilato (Google/Zernio/Telegram/NEXT_PUBLIC_APP_URL) + Vercel. Segreti NON in git.
+- **Regole**: tutto locale; merge su main solo verificato; **push solo su richiesta**. Browser-verify prima del merge (l'utente verifica dal vivo, il browser MCP non raggiunge localhost in questa sessione). Notifica audio ai checkpoint: `afplay /System/Library/Sounds/Glass.aiff` (forma **pulita**, senza `2>/dev/null &`).
