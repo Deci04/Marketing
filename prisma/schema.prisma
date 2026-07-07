@@ -49,6 +49,7 @@ model Workspace {
   calendarEvents     CalendarEvent[]
   dashboardLayouts   DashboardLayout[]
   audienceSegments   AudienceSegment[]
+  zernioSnapshots    ZernioSnapshot[]
   contentClasses     ContentClass[]
   chatThreads        ChatThread[]
   chatMessages       ChatMessage[]
@@ -300,6 +301,20 @@ model MetricSnapshot {
   content        Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
 
   @@index([contentId])
+}
+
+// ONDATA 2: snapshot Zernio "ricco" (classifica post, best-time, posting-frequency,
+// content-decay, storico follower) come blob Json, upsert per (workspace, channel).
+model ZernioSnapshot {
+  id          String    @id @default(cuid())
+  workspaceId String
+  channel     Channel?
+  takenAt     DateTime  @default(now())
+  data        Json // ZernioSnapshotData (src/lib/zernio-snapshot.ts)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, channel])
+  @@index([workspaceId])
 }
 
 // --- F1: dashboard personalizzabile + box strategici audience ---
