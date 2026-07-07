@@ -110,3 +110,35 @@
     letter-spacing: -0.01em;
   }
 }
+
+/* --- KPI dashboard: react-grid-layout, allineato all'identità del software ---
+   Si usano gli STESSI selettori della lib + `!important` per vincere a prescindere
+   dall'ordine di import (la CSS della lib è importata nel client component, dopo globals).
+   CRITICO: animare SOLO `transform` (posizione), MAI width/height: altrimenti la dimensione
+   dei box cambia in continuo durante il reflow (es. al merge) → il ResizeObserver di
+   Recharts (ResponsiveContainer nel grafico) va in loop ("Maximum update depth exceeded"). */
+.react-grid-item.cssTransforms {
+  transition: transform 220ms cubic-bezier(0.2, 0, 0, 1) !important;
+}
+.react-grid-item.resizing,
+.react-grid-item.react-draggable-dragging,
+.react-grid-item.dropping {
+  transition: none !important;
+}
+.react-grid-item.react-draggable-dragging {
+  z-index: 30;
+  cursor: grabbing;
+}
+/* ombra di sollevamento sull'INNER wrapper (nessuno scale: cambierebbe la dimensione
+   del contenuto e farebbe ripartire il loop di resize del grafico) */
+.react-grid-item.react-draggable-dragging > * {
+  box-shadow: 0 18px 44px rgba(26, 24, 19, 0.2);
+  border-radius: 1rem;
+}
+/* placeholder: da 'background: red' di default a contorno tratteggiato brand */
+.react-grid-item.react-grid-placeholder {
+  background: var(--secondary) !important;
+  opacity: 0.5 !important;
+  border: 2px dashed var(--border) !important;
+  border-radius: 1rem !important;
+}

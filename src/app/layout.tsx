@@ -35,7 +35,9 @@ export default function RootLayout({
       lang="it"
       className={`${sans.variable} ${heading.variable} ${mono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      {/* suppressHydrationWarning: estensioni browser (es. Grammarly) iniettano attributi
+          data-* nel <body> prima dell'hydration → warning benigno da silenziare. */}
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
         {children}
         <Toaster
           position="bottom-right"

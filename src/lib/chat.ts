@@ -9,15 +9,20 @@ import { scopedWhere } from "@/lib/workspace";
  * Messages carry an `authorId` for attribution (null = the assistant).
  */
 
-/** Get the workspace's single shared thread, creating it on first use. */
-export async function getOrCreateWorkspaceThread(workspaceId: string) {
+/** Get the workspace's shared thread for a given title, creating it on first use.
+ *  The default title preserves the existing slide-over behaviour; the diary uses a
+ *  distinct persistent thread ("Diario di Luca"). */
+export async function getOrCreateWorkspaceThread(
+  workspaceId: string,
+  title: string = "Chat del workspace"
+) {
   const existing = await db.chatThread.findFirst({
-    where: scopedWhere(workspaceId),
+    where: scopedWhere(workspaceId, { title }),
     orderBy: { createdAt: "asc" },
   });
   if (existing) return existing;
   return db.chatThread.create({
-    data: { workspaceId, title: "Chat del workspace" },
+    data: { workspaceId, title },
   });
 }
 

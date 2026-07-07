@@ -16,7 +16,7 @@ import {
   Prohibit,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
-import { describeAction } from "@/lib/chat-write-tools";
+import { describeAction } from "@/lib/chat-describe";
 
 type StoredMessage = {
   id: string;

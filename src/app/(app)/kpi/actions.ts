@@ -1,10 +1,25 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { currentContext } from "@/lib/current";
+import { currentContext, currentUser } from "@/lib/current";
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
 import { updateContent } from "@/lib/content";
+import {
+  fetchAnalytics,
+  ingestAnalytics,
+  isConfigured,
+  platformToChannel,
+  fetchAccountInsights,
+  fetchAccountProfile,
+  mapDirectInsights,
+  mapProfile,
+  writeDirectMeasurements,
+  type IngestSummary,
+  type InsightWindow,
+} from "@/lib/zernio";
+import { PERIOD_PRESETS } from "@/lib/kpi";
+import { buildSnapshot, writeZernioSnapshot } from "@/lib/zernio-snapshot";
 import type { Channel, Prisma } from "@prisma/client";
 
 function num(v: FormDataEntryValue | null): number | null {
@@ -263,4 +278,88 @@ export async function resetDashboardLayoutAction() {
     })
     .catch(() => {});
   revalidatePath("/kpi");
+}
+
+// --- Refresh KPI on-demand da Zernio (solo admin, niente cron) ---
+
+export async function refreshKpiAction(): Promise<{
+  ok: boolean;
+  error?: string;
+  summary?: IngestSummary;
+}> {
+  const user = await currentUser();
+  if (!user?.isAdmin) return { ok: false, error: "Non autorizzato" };
+  const ctx = await currentContext();
+  if (!ctx) return { ok: false, error: "Nessun workspace" };
+  if (!isConfigured()) return { ok: false, error: "Zernio non configurato" };
+
+  const accounts = await db.socialAccount.findMany({
+    where: scopedWhere(ctx.workspaceId),
+  });
+  if (accounts.length === 0)
+    return { ok: false, error: "Nessun account social collegato" };
+
+  let total: IngestSummary = {
+    measurements: 0,
+    segments: 0,
+    postsMatched: 0,
+    postsMissing: 0,
+  };
+  for (const acc of accounts) {
+    try {
+      const analytics = await fetchAnalytics({
+        profileId: acc.zernioAccountId,
+        platform: acc.platform,
+      });
+      const s = await ingestAnalytics(ctx.workspaceId, analytics, {
+        channel: platformToChannel(acc.platform),
+      });
+      total = {
+        measurements: total.measurements + s.measurements,
+        segments: total.segments + s.segments,
+        postsMatched: total.postsMatched + s.postsMatched,
+        postsMissing: total.postsMissing + s.postsMissing,
+      };
+
+      // --- Diretti (ONDATA 1): account-insights per periodo + profilo ---
+      if (acc.platform === "INSTAGRAM") {
+        const now = new Date();
+        const to = now.toISOString().slice(0, 10);
+        const ymd = (d: Date) => d.toISOString().slice(0, 10);
+        const windows: InsightWindow[] = [];
+        for (const period of PERIOD_PRESETS) {
+          const eff = Math.min(period, 88); // limite finestra Zernio
+          const curSince = ymd(new Date(now.getTime() - eff * 86_400_000));
+          const prevUntil = curSince;
+          const prevSince = ymd(new Date(now.getTime() - 2 * eff * 86_400_000));
+          const [current, previous] = await Promise.all([
+            fetchAccountInsights(acc.zernioAccountId, curSince, to),
+            fetchAccountInsights(acc.zernioAccountId, prevSince, prevUntil),
+          ]);
+          windows.push({ period, current, previous });
+        }
+        const profile = await fetchAccountProfile(acc.zernioAccountId);
+        const channel = platformToChannel(acc.platform);
+        const snapDate = new Date(`${to}T00:00:00.000Z`);
+        const written = await writeDirectMeasurements(ctx.workspaceId, [
+          ...mapDirectInsights(windows, channel, snapDate),
+          ...mapProfile(profile, channel, snapDate),
+        ]);
+        total = { ...total, measurements: total.measurements + written };
+
+        // ONDATA 2: snapshot ricco (classifica post, best-time, freq, decay, follower).
+        const snapshot = await buildSnapshot({
+          accountId: acc.zernioAccountId,
+          platform: acc.platform,
+          fromYmd: ymd(new Date(now.getTime() - 88 * 86_400_000)),
+          toYmd: to,
+        });
+        await writeZernioSnapshot(ctx.workspaceId, channel, snapshot);
+      }
+    } catch (e) {
+      return { ok: false, error: `Zernio: ${(e as Error).message}` };
+    }
+  }
+  revalidatePath("/kpi");
+  return { ok: true, summary: total };
 }

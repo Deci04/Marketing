@@ -1,0 +1,27 @@
+{
+  "account": [
+    { "date": "2026-07-01", "followers": 1000, "engagementRate": 5, "nonFollowerPct": 40 },
+    { "date": "2026-07-02", "followers": 1025, "engagementRate": 6.2, "nonFollowerPct": 43 }
+  ],
+  "demographics": [
+    { "dimension": "age", "label": "25-34", "value": 32 },
+    { "dimension": "age", "label": "35-44", "value": 21 },
+    { "dimension": "gender", "label": "F", "value": 58 },
+    { "dimension": "gender", "label": "M", "value": 42 },
+    { "dimension": "geo", "label": "IT", "value": 71 }
+  ],
+  "posts": [
+    {
+      "externalId": "post_ext_1",
+      "impressions": 15000,
+      "reach": 9000,
+      "likes": 540,
+      "comments": 62,
+      "saves": 130,
+      "shares": 44,
+      "clicks": 89,
+      "views": 12000,
+      "engagementRate": 8.62
+    }
+  ]
+}

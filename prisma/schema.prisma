@@ -49,10 +49,15 @@ model Workspace {
   calendarEvents     CalendarEvent[]
   dashboardLayouts   DashboardLayout[]
   audienceSegments   AudienceSegment[]
+  zernioSnapshots    ZernioSnapshot[]
   contentClasses     ContentClass[]
   chatThreads        ChatThread[]
   chatMessages       ChatMessage[]
   activities         Activity[]
+  googleCalendarConfig GoogleCalendarConfig?
+  googleLinks          GoogleCalendarLink[]
+  socialAccounts       SocialAccount[]
+  diaryEntries         DiaryEntry[]
 }
 
 model User {
@@ -63,6 +68,8 @@ model User {
   isAdmin     Boolean      @default(false)
   createdAt   DateTime     @default(now())
   notificationsSeenAt DateTime? // ultimo momento in cui ha aperto il feed notifiche
+  telegramChatId   String? @unique // chat Telegram collegata (filoni T/N)
+  telegramLinkCode String? // codice temporaneo di collegamento
   memberships Membership[]
   accounts    Account[]
   sessions    Session[]
@@ -190,6 +197,10 @@ model Content {
   saves            Int?
   shares           Int?
   followsGenerated Int?
+  // integrazioni serata (Z ingestione / W pubblicazione)
+  externalId       String? // id del post sulla piattaforma (Zernio)
+  publishState     String? // null|"scheduled"|"publishing"|"published"|"failed"
+  publishError     String? // messaggio ultimo errore pubblicazione
   createdAt        DateTime       @default(now())
   workspace        Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   block            Block?         @relation(fields: [blockId], references: [id], onDelete: SetNull)
@@ -201,6 +212,7 @@ model Content {
 
   @@index([workspaceId])
   @@index([blockId])
+  @@index([externalId])
 }
 
 model Material {
@@ -291,6 +303,20 @@ model MetricSnapshot {
   @@index([contentId])
 }
 
+// ONDATA 2: snapshot Zernio "ricco" (classifica post, best-time, posting-frequency,
+// content-decay, storico follower) come blob Json, upsert per (workspace, channel).
+model ZernioSnapshot {
+  id          String    @id @default(cuid())
+  workspaceId String
+  channel     Channel?
+  takenAt     DateTime  @default(now())
+  data        Json // ZernioSnapshotData (src/lib/zernio-snapshot.ts)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, channel])
+  @@index([workspaceId])
+}
+
 // --- F1: dashboard personalizzabile + box strategici audience ---
 
 model DashboardLayout {
@@ -360,4 +386,64 @@ model ChatMessage {
 
   @@index([threadId])
   @@index([workspaceId])
+}
+
+// --- Integrazioni serata (2026-07-04) ---
+
+model GoogleCalendarConfig {
+  workspaceId       String    @id
+  calendarId        String
+  channelId         String?
+  resourceId        String?
+  watchExpiration   DateTime?
+  syncToken         String?
+  connectedByUserId String?
+  createdAt         DateTime  @default(now())
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model GoogleCalendarLink {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  refType          String // "luca" | "matteo" | "publication" | "event"
+  refId            String
+  googleEventId    String
+  googleCalendarId String
+  etag             String?
+  syncStatus       String    @default("SYNCED") // LOCAL|SYNCED|PENDING_PUSH|CONFLICT|DELETED
+  lastSyncedAt     DateTime?
+  createdAt        DateTime  @default(now())
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, refType, refId])
+  @@index([googleEventId])
+}
+
+model SocialAccount {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  platform        String // "INSTAGRAM" | "TIKTOK" | "YOUTUBE" | "LINKEDIN"
+  zernioAccountId String
+  handle          String?
+  connectedAt     DateTime  @default(now())
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, platform])
+  @@index([workspaceId])
+}
+
+model DiaryEntry {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  authorUserId     String?
+  rawText          String?
+  caption          String?
+  telegramFileId   String?
+  telegramFileType String? // "photo" | "video" | "document"
+  aiTitle          String?
+  aiDescription    String? // per le foto: descrizione via vision
+  createdAt        DateTime @default(now())
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
 }

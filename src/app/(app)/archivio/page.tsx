@@ -1,5 +1,9 @@
 import { currentContext } from "@/lib/current";
-import { listContents, engagementRate } from "@/lib/content";
+import {
+  listContents,
+  engagementRate,
+  splitActiveArchived,
+} from "@/lib/content";
 import { effectiveStatus } from "@/lib/status";
 import { ArchiveTable, type ArchiveRow } from "@/components/archive-table";
 
@@ -7,8 +11,10 @@ export default async function ArchivioPage() {
   const ctx = await currentContext();
   if (!ctx) return null;
   const contents = await listContents(ctx.workspaceId);
+  // Archive = contents "Pubblicato" da >14 giorni (spec S). The rest stays in /contenuti.
+  const { archived } = splitActiveArchived(contents, new Date());
 
-  const rows: ArchiveRow[] = contents.map((c) => {
+  const rows: ArchiveRow[] = archived.map((c) => {
     const er = engagementRate(c);
     return {
       id: c.id,
@@ -36,7 +42,7 @@ export default async function ArchivioPage() {
       <header>
         <h1 className="text-3xl">Archivio</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {rows.length} contenuti · ordina cliccando le colonne
+          {rows.length} {rows.length === 1 ? "contenuto pubblicato" : "contenuti pubblicati"} da oltre 14 giorni · ordina cliccando le colonne
         </p>
       </header>
       <ArchiveTable rows={rows} />

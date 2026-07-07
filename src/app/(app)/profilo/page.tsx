@@ -1,16 +1,43 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { currentUser } from "@/lib/current";
+import { currentUser, currentContext } from "@/lib/current";
 import { signOut } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { createWorkspaceAction } from "./actions";
+import { isConfigured as googleConfigured } from "@/lib/google-calendar";
+import { isConfigured as zernioConfigured } from "@/lib/zernio";
+import { createWorkspaceAction, disconnectSocialAccountAction } from "./actions";
+import { TelegramLink } from "@/components/profilo/telegram-link";
 import {
   UsersThree,
   Plus,
   ShieldStar,
   SignOut,
   ArrowRight,
+  CalendarCheck,
+  CheckCircle,
+  PlugsConnected,
+  InstagramLogo,
+  TiktokLogo,
+  YoutubeLogo,
+  LinkedinLogo,
 } from "@phosphor-icons/react/dist/ssr";
+
+const SOCIAL_PLATFORMS = [
+  { key: "INSTAGRAM", label: "Instagram", Icon: InstagramLogo },
+  { key: "TIKTOK", label: "TikTok", Icon: TiktokLogo },
+  { key: "YOUTUBE", label: "YouTube", Icon: YoutubeLogo },
+  { key: "LINKEDIN", label: "LinkedIn", Icon: LinkedinLogo },
+] as const;
+
+const ZERNIO_BANNER: Record<string, { text: string; ok: boolean }> = {
+  ok: { text: "Account social collegato.", ok: true },
+  error: { text: "Collegamento social non riuscito. Riprova.", ok: false },
+  nonconfig: { text: "Zernio non è configurato.", ok: false },
+};
+const GOOGLE_BANNER: Record<string, { text: string; ok: boolean }> = {
+  connected: { text: "Google Calendar collegato.", ok: true },
+  error: { text: "Collegamento Google non riuscito. Riprova.", ok: false },
+};
 
 const TILES = [
   "bg-lavender text-lavender-ink",
@@ -20,9 +47,33 @@ const TILES = [
   "bg-coral text-coral-ink",
 ];
 
-export default async function ProfiloPage() {
+export default async function ProfiloPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await currentUser();
   if (!user) redirect("/login");
+
+  const sp = await searchParams;
+  const ctx = await currentContext();
+  const [googleCfg, socialAccounts] = ctx
+    ? await Promise.all([
+        db.googleCalendarConfig.findUnique({
+          where: { workspaceId: ctx.workspaceId },
+        }),
+        db.socialAccount.findMany({
+          where: { workspaceId: ctx.workspaceId },
+        }),
+      ])
+    : [null, []];
+  const socialByPlatform = new Map(
+    socialAccounts.map((a) => [a.platform, a])
+  );
+  const zernioBanner =
+    typeof sp.zernio === "string" ? ZERNIO_BANNER[sp.zernio] : undefined;
+  const googleBanner =
+    typeof sp.google === "string" ? GOOGLE_BANNER[sp.google] : undefined;
 
   const spaces = user.isAdmin
     ? await db.workspace.findMany({
@@ -136,6 +187,128 @@ export default async function ProfiloPage() {
           </form>
         )}
       </section>
+
+      {/* Integrazioni */}
+      {ctx && (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <PlugsConnected size={20} className="text-muted-foreground" />
+            <h2 className="text-xl">Integrazioni</h2>
+          </div>
+
+          {(zernioBanner || googleBanner) && (
+            <div className="space-y-2">
+              {[zernioBanner, googleBanner]
+                .filter((b): b is { text: string; ok: boolean } => !!b)
+                .map((b, i) => (
+                  <p
+                    key={i}
+                    className={`rounded-xl border px-3.5 py-2.5 text-sm ${
+                      b.ok
+                        ? "border-sage/50 bg-sage/20 text-sage-ink"
+                        : "border-coral/50 bg-coral/20 text-coral-ink"
+                    }`}
+                  >
+                    {b.text}
+                  </p>
+                ))}
+            </div>
+          )}
+
+          {/* Google Calendar */}
+          <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2">
+              <CalendarCheck size={20} className="text-lavender-ink" />
+              <h3 className="text-lg">Google Calendar</h3>
+              {googleCfg && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-sage px-2.5 py-1 text-[11px] font-medium text-sage-ink">
+                  <CheckCircle size={13} weight="fill" /> Collegato
+                </span>
+              )}
+            </div>
+            {!googleConfigured() ? (
+              <p className="text-sm text-muted-foreground">
+                Google Calendar non è configurato.
+              </p>
+            ) : googleCfg ? (
+              <p className="text-sm text-muted-foreground">
+                Gli eventi si sincronizzano con il calendario dedicato dello
+                spazio.
+              </p>
+            ) : (
+              <a
+                href="/api/integrations/google/authorize"
+                className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
+              >
+                <CalendarCheck size={16} /> Connetti Google Calendar
+              </a>
+            )}
+          </div>
+
+          {/* Account social (Zernio) */}
+          <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2">
+              <PlugsConnected size={20} className="text-lavender-ink" />
+              <h3 className="text-lg">Account social</h3>
+            </div>
+            {!zernioConfigured() && (
+              <p className="text-sm text-muted-foreground">
+                Zernio non è configurato: il collegamento non è disponibile.
+              </p>
+            )}
+            <div className="grid gap-2 sm:grid-cols-2">
+              {SOCIAL_PLATFORMS.map(({ key, label, Icon }) => {
+                const acc = socialByPlatform.get(key);
+                return (
+                  <div
+                    key={key}
+                    className="flex items-center gap-3 rounded-xl border border-border bg-paper p-3"
+                  >
+                    <Icon size={20} className="shrink-0 text-ink/70" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-ink">{label}</div>
+                      {acc && (
+                        <div className="truncate text-xs text-muted-foreground">
+                          {acc.handle ?? "collegato"}
+                        </div>
+                      )}
+                    </div>
+                    {acc ? (
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-sage px-2.5 py-1 text-[11px] font-medium text-sage-ink">
+                          <CheckCircle size={13} weight="fill" /> Collegato
+                        </span>
+                        <form action={disconnectSocialAccountAction}>
+                          <input type="hidden" name="zernioAccountId" value={acc.zernioAccountId} />
+                          <button
+                            type="submit"
+                            className="rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-ink"
+                          >
+                            Disconnetti
+                          </button>
+                        </form>
+                      </div>
+                    ) : (
+                      <a
+                        href={`/api/integrations/zernio/connect/${key}`}
+                        className="shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-ink/80 transition-colors hover:bg-secondary"
+                      >
+                        Collega
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Telegram */}
+          <TelegramLink
+            linked={!!user.telegramChatId}
+            code={user.telegramLinkCode ?? null}
+          />
+        </section>
+      )}
     </div>
   );
 }

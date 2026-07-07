@@ -1,0 +1,56 @@
+import { db } from "@/lib/db";
+import { scopedWhere } from "@/lib/workspace";
+import type { DiaryEntry } from "@prisma/client";
+
+export type DiaryEntryInput = {
+  authorUserId?: string | null;
+  rawText?: string | null;
+  caption?: string | null;
+  telegramFileId?: string | null;
+  telegramFileType?: string | null; // "photo" | "video" | "document"
+  aiTitle?: string | null;
+  aiDescription?: string | null;
+};
+
+export async function createDiaryEntry(
+  workspaceId: string,
+  data: DiaryEntryInput
+): Promise<DiaryEntry> {
+  return db.diaryEntry.create({
+    data: {
+      workspaceId,
+      authorUserId: data.authorUserId ?? null,
+      rawText: data.rawText ?? null,
+      caption: data.caption ?? null,
+      telegramFileId: data.telegramFileId ?? null,
+      telegramFileType: data.telegramFileType ?? null,
+      aiTitle: data.aiTitle ?? null,
+      aiDescription: data.aiDescription ?? null,
+    },
+  });
+}
+
+export async function searchDiaryEntries(
+  workspaceId: string,
+  opts?: { query?: string; limit?: number }
+): Promise<DiaryEntry[]> {
+  const q = opts?.query?.trim();
+  const where = scopedWhere(
+    workspaceId,
+    q
+      ? {
+          OR: [
+            { rawText: { contains: q, mode: "insensitive" as const } },
+            { caption: { contains: q, mode: "insensitive" as const } },
+            { aiTitle: { contains: q, mode: "insensitive" as const } },
+            { aiDescription: { contains: q, mode: "insensitive" as const } },
+          ],
+        }
+      : undefined
+  );
+  return db.diaryEntry.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: opts?.limit ?? 20,
+  });
+}

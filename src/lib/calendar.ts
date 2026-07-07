@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
+import { syncItemOut, deleteItemOut } from "@/lib/google-calendar";
 import type { Channel } from "@prisma/client";
 
 /** A Monday-start 6×7 grid of dates covering the given month (month: 0-11).
@@ -169,10 +170,13 @@ export async function setBlockDelivery(
   date: Date
 ) {
   if (!(await scopedBlock(workspaceId, blockId))) return null;
-  return db.block.update({
+  const updated = await db.block.update({
     where: { id: blockId },
     data: who === "luca" ? { lucaDeliveryAt: date } : { matteoDeliveryAt: date },
   });
+  // G: USCITA — push della delivery date (who è già "luca"|"matteo").
+  void syncItemOut(workspaceId, who, blockId).catch(() => {});
+  return updated;
 }
 
 export async function moveItem(
@@ -183,19 +187,25 @@ export async function moveItem(
 ) {
   if (refType === "luca" || refType === "matteo") {
     if (!(await scopedBlock(workspaceId, refId))) return null;
-    return db.block.update({
+    const updated = await db.block.update({
       where: { id: refId },
       data: refType === "luca" ? { lucaDeliveryAt: date } : { matteoDeliveryAt: date },
     });
+    void syncItemOut(workspaceId, refType, refId).catch(() => {}); // G: USCITA
+    return updated;
   }
   if (refType === "publication") {
     const c = await db.content.findFirst({ where: scopedWhere(workspaceId, { id: refId }), select: { id: true } });
     if (!c) return null;
-    return db.content.update({ where: { id: refId }, data: { publishAt: date } });
+    const updated = await db.content.update({ where: { id: refId }, data: { publishAt: date } });
+    void syncItemOut(workspaceId, refType, refId).catch(() => {}); // G: USCITA
+    return updated;
   }
   const e = await db.calendarEvent.findFirst({ where: scopedWhere(workspaceId, { id: refId }), select: { id: true } });
   if (!e) return null;
-  return db.calendarEvent.update({ where: { id: refId }, data: { date } });
+  const updated = await db.calendarEvent.update({ where: { id: refId }, data: { date } });
+  void syncItemOut(workspaceId, refType, refId).catch(() => {}); // G: USCITA
+  return updated;
 }
 
 export async function deleteItem(
@@ -205,18 +215,25 @@ export async function deleteItem(
 ) {
   if (refType === "luca" || refType === "matteo") {
     if (!(await scopedBlock(workspaceId, refId))) return null;
-    return db.block.update({
+    const updated = await db.block.update({
       where: { id: refId },
       data: refType === "luca" ? { lucaDeliveryAt: null } : { matteoDeliveryAt: null },
     });
+    // G: la data è azzerata → l'item sparisce dal board → rimuovi da Google.
+    void deleteItemOut(workspaceId, refType, refId).catch(() => {});
+    return updated;
   }
   if (refType === "publication") {
     const c = await db.content.findFirst({ where: scopedWhere(workspaceId, { id: refId }), select: { id: true } });
     if (!c) return null;
-    return db.content.update({ where: { id: refId }, data: { publishAt: null } });
+    const updated = await db.content.update({ where: { id: refId }, data: { publishAt: null } });
+    void deleteItemOut(workspaceId, refType, refId).catch(() => {}); // G: USCITA
+    return updated;
   }
   const e = await db.calendarEvent.findFirst({ where: scopedWhere(workspaceId, { id: refId }), select: { id: true } });
   if (!e) return null;
+  // G: vero delete dell'evento → rimuovi da Google prima di eliminare la riga.
+  void deleteItemOut(workspaceId, "event", refId).catch(() => {});
   return db.calendarEvent.delete({ where: { id: refId } });
 }
 
@@ -224,9 +241,12 @@ export async function addEvent(
   workspaceId: string,
   data: { date: Date; title: string; responsible?: string | null }
 ) {
-  return db.calendarEvent.create({
+  const created = await db.calendarEvent.create({
     data: { workspaceId, date: data.date, title: data.title, responsible: data.responsible || null },
   });
+  // G: USCITA — push del nuovo evento su Google.
+  void syncItemOut(workspaceId, "event", created.id).catch(() => {});
+  return created;
 }
 
 export async function createBlockRange(
@@ -257,6 +277,9 @@ export async function createBlockRange(
     }),
     data: { blockId: block.id },
   });
+  // G: USCITA — il nuovo block ha entrambe le delivery date di default → push di entrambe.
+  void syncItemOut(workspaceId, "luca", block.id).catch(() => {});
+  void syncItemOut(workspaceId, "matteo", block.id).catch(() => {});
   return block;
 }
 
@@ -325,6 +348,9 @@ export async function resizeBlock(
     [startDate, endDate] = [endDate, startDate];
   }
   await db.block.update({ where: { id }, data: { startDate, endDate } });
+  // G: NESSUNA push — il resize muove startDate/endDate del block, non le delivery
+  // date (lucaDeliveryAt/matteoDeliveryAt), che sono gli unici item del board
+  // mappati su Google. Sincronizzare qui produrrebbe sync spurie.
   if (startDate && endDate) {
     await db.content.updateMany({
       where: scopedWhere(workspaceId, {

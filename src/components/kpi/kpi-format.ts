@@ -18,6 +18,15 @@ export function ratio(value: number | null, digits = 2): string {
   return `${value.toFixed(digits)}×`;
 }
 
+/** Formatta un delta percentuale per i badge delle metric card. Minus tipografico U+2212. */
+export function deltaFmt(deltaPct: number | null): { text: string; tone: "up" | "down" | "flat" } {
+  if (deltaPct == null) return { text: "—", tone: "flat" };
+  const r = Math.round(deltaPct);
+  if (r > 0) return { text: `+${r}%`, tone: "up" };
+  if (r < 0) return { text: `−${Math.abs(r)}%`, tone: "down" };
+  return { text: "0%", tone: "flat" };
+}
+
 export function fmtDate(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("it-IT", {

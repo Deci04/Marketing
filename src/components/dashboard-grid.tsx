@@ -19,13 +19,40 @@ import "react-resizable/css/styles.css";
 import type { KpiData } from "@/lib/kpi";
 import {
   BOX_CATALOG,
+  ALL_BOX_IDS,
   normalizeLayout,
   defaultLayout,
+  splitCard,
+  mergeCards,
+  addMetricCard,
+  removeMetricCard,
   type BoxId,
   type StoredLayout,
+  type GridItem,
 } from "@/lib/dashboard-config";
+import { INSIGHT_KEYS, PROFILE_KEYS, type MetricKey } from "@/lib/metric-keys";
 import { KpiBox } from "./kpi/kpi-boxes";
+import { MetricCard, METRIC_META } from "./kpi/metric-card";
 import { KpiEditors, type EditorKind } from "./kpi/kpi-editors";
+
+const METRIC_CARD_TITLES: Record<string, string> = {
+  "mc:interazioni": "Interazioni",
+  "mc:profilo": "Profilo & salute",
+};
+function metricCardTitle(card: { i: string; metrics: MetricKey[] }): string {
+  return METRIC_CARD_TITLES[card.i] ?? METRIC_META[card.metrics[0]]?.label ?? "Metriche";
+}
+
+/** Confronta due liste di item per posizione/dimensione (ignora minW/minH). */
+function sameItems(a: GridItem[], b: GridItem[]): boolean {
+  if (a.length !== b.length) return false;
+  const map = new Map(a.map((it) => [it.i, it]));
+  for (const it of b) {
+    const p = map.get(it.i);
+    if (!p || p.x !== it.x || p.y !== it.y || p.w !== it.w || p.h !== it.h) return false;
+  }
+  return true;
+}
 import {
   saveDashboardLayoutAction,
   resetDashboardLayoutAction,
@@ -50,6 +77,15 @@ export function DashboardGrid({
   const [editor, setEditor] = useState<EditorKind>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Merge-per-trascinamento: tieni una card sopra un'altra ~3s → si fondono.
+  const srcRef = useRef<string | null>(null);
+  const targetRef = useRef<string | null>(null);
+  const armedRef = useRef<string | null>(null);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [mergeUI, setMergeUI] = useState<{ target: string | null; armed: boolean }>({
+    target: null,
+    armed: false,
+  });
 
   // Measure container width client-side (react-grid-layout v2 needs explicit width).
   useEffect(() => {
@@ -77,9 +113,14 @@ export function DashboardGrid({
   const onLayoutChange = useCallback(
     (next: Layout) => {
       setLayout((prev) => {
-        const merged: StoredLayout = {
-          hidden: prev.hidden,
-          items: next.map((n: LayoutItem) => {
+        // Tieni solo box legacy noti o metric card ancora esistenti: dopo un merge la card
+        // sorgente sparisce da metricCards, quindi un onLayoutChange che la porta ancora
+        // (drop position) NON la re-inserisce. Robusto senza flag/skip.
+        const known = (i: string) =>
+          ALL_BOX_IDS.includes(i as BoxId) || prev.metricCards.some((c) => c.i === i);
+        const nextItems = next
+          .filter((n) => known(n.i))
+          .map((n: LayoutItem) => {
             const old = prev.items.find((p) => p.i === n.i);
             return {
               i: n.i,
@@ -90,7 +131,13 @@ export function DashboardGrid({
               minW: old?.minW ?? 2,
               minH: old?.minH ?? 2,
             };
-          }),
+          });
+        // Nessun cambiamento reale → non aggiornare lo stato (evita loop di render con RGL).
+        if (sameItems(prev.items, nextItems)) return prev;
+        const merged: StoredLayout = {
+          hidden: prev.hidden,
+          metricCards: prev.metricCards,
+          items: nextItems,
         };
         persist(merged);
         return merged;
@@ -126,6 +173,7 @@ export function DashboardGrid({
         const next: StoredLayout = {
           items,
           hidden: prev.hidden.filter((h) => h !== id),
+          metricCards: prev.metricCards,
         };
         persist(next);
         return next;
@@ -134,6 +182,119 @@ export function DashboardGrid({
     },
     [persist]
   );
+
+  // --- Metric card: dividi / unisci / aggiungi / rimuovi ---
+  const applyTransform = useCallback(
+    (fn: (l: StoredLayout) => StoredLayout) => {
+      setLayout((prev) => {
+        const next = fn(prev);
+        persist(next);
+        return next;
+      });
+    },
+    [persist]
+  );
+  const applySplit = useCallback((id: string) => applyTransform((l) => splitCard(l, id)), [applyTransform]);
+  const applyRemove = useCallback(
+    (id: string) => {
+      applyTransform((l) => removeMetricCard(l, id));
+      toast.success("Card rimossa");
+    },
+    [applyTransform]
+  );
+  const applyAddMetric = useCallback(
+    (metric: MetricKey) => {
+      applyTransform((l) => addMetricCard(l, metric));
+      toast.success("Metrica aggiunta");
+    },
+    [applyTransform]
+  );
+
+  const addableMetrics = useMemo(
+    () =>
+      [...INSIGHT_KEYS, ...PROFILE_KEYS].filter(
+        (k) => !layout.metricCards.some((c) => c.metrics.includes(k))
+      ),
+    [layout.metricCards]
+  );
+
+  // --- Merge per trascinamento (hold ~3s) ---
+  const HOLD_MS = 3000;
+  const clearHold = useCallback(() => {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  }, []);
+  const setMergeTarget = useCallback(
+    (targetId: string | null) => {
+      if (targetRef.current === targetId) return;
+      targetRef.current = targetId;
+      armedRef.current = null;
+      clearHold();
+      setMergeUI({ target: targetId, armed: false });
+      if (targetId) {
+        holdTimer.current = setTimeout(() => {
+          armedRef.current = targetId;
+          setMergeUI({ target: targetId, armed: true });
+        }, HOLD_MS);
+      }
+    },
+    [clearHold]
+  );
+  const onDragStart = useCallback(
+    (_l: Layout, oldItem: LayoutItem | null) => {
+      srcRef.current = oldItem?.i.startsWith("mc:") ? oldItem.i : null;
+      targetRef.current = null;
+      armedRef.current = null;
+      clearHold();
+      setMergeUI({ target: null, armed: false });
+    },
+    [clearHold]
+  );
+  const onDrag = useCallback(
+    (gridLayout: Layout, _o: LayoutItem | null, newItem: LayoutItem | null) => {
+      const src = srcRef.current;
+      if (!src || !newItem) {
+        setMergeTarget(null);
+        return;
+      }
+      let best: string | null = null;
+      let bestArea = 0;
+      for (const it of gridLayout) {
+        if (it.i === src || !it.i.startsWith("mc:")) continue;
+        const ix = Math.max(0, Math.min(newItem.x + newItem.w, it.x + it.w) - Math.max(newItem.x, it.x));
+        const iy = Math.max(0, Math.min(newItem.y + newItem.h, it.y + it.h) - Math.max(newItem.y, it.y));
+        const area = ix * iy;
+        if (area > bestArea) {
+          bestArea = area;
+          best = it.i;
+        }
+      }
+      const need = newItem.w * newItem.h * 0.3; // richiedi >30% di sovrapposizione
+      setMergeTarget(bestArea >= need ? best : null);
+    },
+    [setMergeTarget]
+  );
+  const onDragStop = useCallback(() => {
+    const src = srcRef.current;
+    const armed = armedRef.current;
+    clearHold();
+    targetRef.current = null;
+    armedRef.current = null;
+    srcRef.current = null;
+    setMergeUI({ target: null, armed: false });
+    if (src && armed && src !== armed) {
+      // La card sorgente sparisce da metricCards: onLayoutChange (drop) la scarta da solo
+      // grazie al filtro `known()`, quindi niente flag/skip qui.
+      setLayout((prev) => {
+        const next = mergeCards(prev, src, armed);
+        persist(next);
+        return next;
+      });
+      toast.success("Card unite");
+    }
+  }, [clearHold, persist]);
 
   const resetLayout = useCallback(async () => {
     setLayout(defaultLayout());
@@ -170,27 +331,50 @@ export function DashboardGrid({
             dragConfig={{ cancel: ".kpi-no-drag" }}
             compactor={verticalCompactor}
             onLayoutChange={onLayoutChange}
+            onDragStart={onDragStart}
+            onDrag={onDrag}
+            onDragStop={onDragStop}
           >
-            {visibleItems.map((it) => (
-              <div key={it.i} className="group/box relative">
-                <div className="absolute -top-1 right-1 z-20 flex translate-y-1 items-center gap-1 opacity-0 transition-opacity group-hover/box:opacity-100">
-                  <span className="kpi-drag-handle cursor-grab rounded-full bg-ink/80 p-1 text-cream active:cursor-grabbing">
-                    <DotsSixVertical size={13} />
-                  </span>
-                  <button
-                    onClick={() => hideBox(it.i as BoxId)}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    aria-label="Nascondi box"
-                    className="kpi-no-drag rounded-full bg-ink/80 p-1 text-cream hover:bg-ink"
-                  >
-                    <EyeSlash size={13} />
-                  </button>
+            {visibleItems.map((it) => {
+              const isMetric = it.i.startsWith("mc:");
+              const card = isMetric ? layout.metricCards.find((m) => m.i === it.i) : null;
+              return (
+                <div key={it.i} className="group/box relative">
+                  <div className="absolute -top-1 right-1 z-20 flex translate-y-1 items-center gap-1 opacity-0 transition-opacity group-hover/box:opacity-100">
+                    <span className="kpi-drag-handle cursor-grab rounded-full border border-border bg-paper p-1 text-ink/55 shadow-[0_1px_3px_rgba(26,24,19,0.10)] transition-colors hover:bg-secondary hover:text-ink active:cursor-grabbing">
+                      <DotsSixVertical size={13} />
+                    </span>
+                    {!isMetric && (
+                      <button
+                        onClick={() => hideBox(it.i as BoxId)}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        aria-label="Nascondi box"
+                        className="kpi-no-drag rounded-full border border-border bg-paper p-1 text-ink/55 shadow-[0_1px_3px_rgba(26,24,19,0.10)] transition-colors hover:bg-secondary hover:text-ink"
+                      >
+                        <EyeSlash size={13} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="h-full overflow-hidden">
+                    {isMetric && card ? (
+                      <MetricCard
+                        cardId={card.i}
+                        metrics={card.metrics}
+                        data={data}
+                        title={card.metrics.length > 1 ? metricCardTitle(card) : undefined}
+                        onSplit={applySplit}
+                        onRemove={applyRemove}
+                        mergeState={
+                          mergeUI.target === card.i ? (mergeUI.armed ? "armed" : "hover") : null
+                        }
+                      />
+                    ) : (
+                      <KpiBox id={it.i as BoxId} data={data} onManage={setEditor} />
+                    )}
+                  </div>
                 </div>
-                <div className="h-full overflow-hidden">
-                  <KpiBox id={it.i as BoxId} data={data} onManage={setEditor} />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </GridLayout>
         )}
         {width === 0 && (
@@ -210,28 +394,59 @@ export function DashboardGrid({
                 <X size={16} />
               </button>
             </div>
-            {hiddenBoxes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Tutti i box sono già visibili.</p>
-            ) : (
-              <div className="space-y-2">
-                {hiddenBoxes.map((b) => (
-                  <button
-                    key={b.id}
-                    onClick={() => {
-                      addBox(b.id);
-                      setCatalogOpen(false);
-                    }}
-                    className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3 text-left transition-colors hover:bg-secondary"
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-ink">{b.title}</div>
-                      <div className="text-xs text-muted-foreground">{b.description}</div>
-                    </div>
-                    <Plus size={16} weight="bold" className="shrink-0 text-ink" />
-                  </button>
-                ))}
+            <div className="max-h-[60vh] space-y-4 overflow-y-auto">
+              <div>
+                <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Metriche dirette</div>
+                {addableMetrics.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Tutte le metriche sono già in una card.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {addableMetrics.map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => {
+                          applyAddMetric(m);
+                          setCatalogOpen(false);
+                        }}
+                        className="flex items-center justify-between gap-2 rounded-2xl border border-border bg-card p-2.5 text-left transition-colors hover:bg-secondary"
+                      >
+                        <span className="flex items-center gap-1.5 text-sm text-ink">
+                          {METRIC_META[m].icon}
+                          <span className="truncate">{METRIC_META[m].label}</span>
+                        </span>
+                        <Plus size={14} weight="bold" className="shrink-0 text-ink" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+
+              <div>
+                <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Box</div>
+                {hiddenBoxes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Tutti i box sono già visibili.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {hiddenBoxes.map((b) => (
+                      <button
+                        key={b.id}
+                        onClick={() => {
+                          addBox(b.id);
+                          setCatalogOpen(false);
+                        }}
+                        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3 text-left transition-colors hover:bg-secondary"
+                      >
+                        <div>
+                          <div className="text-sm font-medium text-ink">{b.title}</div>
+                          <div className="text-xs text-muted-foreground">{b.description}</div>
+                        </div>
+                        <Plus size={16} weight="bold" className="shrink-0 text-ink" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

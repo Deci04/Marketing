@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
 import { engagementRate } from "@/lib/content";
+import { readZernioSnapshot, type ZernioSnapshotData } from "@/lib/zernio-snapshot";
 import type { Channel } from "@prisma/client";
 
 export type SeriesPoint = {
@@ -24,6 +25,38 @@ export type KpiFilter = {
 /** Period presets used by the dashboard filter bar. */
 export const PERIOD_PRESETS = [7, 30, 90] as const;
 export type PeriodDays = (typeof PERIOD_PRESETS)[number];
+
+// --- Metriche DIRETTE da Zernio account-insights (ONDATA 1) ---
+// Costanti/tipi definiti in metric-keys.ts (CLIENT-SAFE); qui re-esportati per i consumer server.
+export {
+  INSIGHT_KEYS,
+  PROFILE_KEYS,
+  type InsightKey,
+  type ProfileKey,
+  type MetricKey,
+  type DirectMetric,
+} from "@/lib/metric-keys";
+import { INSIGHT_KEYS, type InsightKey, type MetricKey, type DirectMetric } from "@/lib/metric-keys";
+
+/** Legge le righe Measurement namespaced `insight:<key>:p<period>:cur|:prev` → delta per metrica. */
+export function readInsightDeltas(
+  rows: { metric: string; value: number }[],
+  period: number
+): Record<InsightKey, DirectMetric> {
+  const byMetric = new Map<string, number>();
+  for (const r of rows) byMetric.set(r.metric, r.value);
+  const out = {} as Record<InsightKey, DirectMetric>;
+  for (const key of INSIGHT_KEYS) {
+    const cur = byMetric.get(`insight:${key}:p${period}:cur`);
+    const prev = byMetric.get(`insight:${key}:p${period}:prev`);
+    const value = cur ?? null;
+    const deltaAbs = cur != null && prev != null ? cur - prev : null;
+    const deltaPct =
+      cur != null && prev != null && prev !== 0 ? ((cur - prev) / prev) * 100 : null;
+    out[key] = { value, deltaAbs, deltaPct };
+  }
+  return out;
+}
 
 /** Build a {from,to} window ending today, going back `days` days. */
 export function periodWindow(days: number, now: Date = new Date()): {
@@ -196,12 +229,14 @@ export function aggregatePerformance(rows: PerfRow[]): AggregatedPerformance {
 export async function getMetricSeries(
   workspaceId: string,
   metric: string,
-  channel?: ChannelFilter
+  channel?: ChannelFilter,
+  window?: { from: Date; to: Date }
 ): Promise<SeriesPoint[]> {
   const rows = await db.measurement.findMany({
     where: scopedWhere(workspaceId, {
       metric,
       ...(channel && channel !== "ALL" ? { channel } : {}),
+      ...(window ? { date: { gte: window.from, lte: window.to } } : {}),
     }),
     orderBy: { date: "asc" },
   });
@@ -253,6 +288,22 @@ export type KpiData = {
   followerLatest: number | null;
   conversionToConversation: number | null;
   reachRate: number | null;
+  /**
+   * % reach da non-follower (0..100), a livello ACCOUNT. Viene dal Measurement
+   * `non_follower_pct` (account-insights), non dai post: `mapPostMetrics` non lo
+   * espone per-post, quindi `perf.avgNonFollowerPct` resta null. Il box
+   * "Reach + % non-follower" legge QUESTO campo.
+   */
+  nonFollowerPct: number | null;
+  /** Metriche DIRETTE da Zernio (ONDATA 1): 12 insight + profilo, con delta per periodo. */
+  directMetrics: Record<MetricKey, DirectMetric>;
+  /** Reach a LIVELLO ACCOUNT (account-insights) per il periodo — fallback quando i post non sono agganciati. */
+  accountReach: number | null;
+  /** Save/Share rate a livello account (saves|shares / reach account), frazione 0..1. */
+  accountSaveRate: number | null;
+  accountShareRate: number | null;
+  /** ONDATA 2: snapshot ricco (classifica post, best-time, freq, decay, follower). */
+  snapshot: ZernioSnapshotData;
   publishedCount: number;
   valueConversations: {
     id: string;
@@ -311,6 +362,8 @@ export async function getKpiData(
     measurements,
     audienceSegments,
     seriesRows,
+    directRows,
+    snapshot,
   ] = await Promise.all([
     db.content.findMany({
       where: scopedWhere(workspaceId, {
@@ -361,8 +414,19 @@ export async function getKpiData(
       orderBy: { date: "desc" },
     }),
     Promise.all(
-      CHART_METRICS.map((m) => getMetricSeries(workspaceId, m, filter.channel))
+      CHART_METRICS.map((m) =>
+        getMetricSeries(workspaceId, m, filter.channel, { from: filter.from, to: filter.to })
+      )
     ),
+    db.measurement.findMany({
+      where: scopedWhere(workspaceId, {
+        series: "Luca",
+        ...channelWhere,
+        OR: [{ metric: { startsWith: "insight:" } }, { metric: { startsWith: "profile:" } }],
+      }),
+      select: { metric: true, value: true },
+    }),
+    readZernioSnapshot(workspaceId, filter.channel !== "ALL" ? filter.channel : null),
   ]);
 
   const perf = aggregatePerformance(contents);
@@ -388,7 +452,44 @@ export async function getKpiData(
 
   const reachRateVal = reachRate(perf.totalReach, end);
 
+  // non_follower_pct è account-level (Measurement), non per-post: prendilo dal
+  // riepilogo della serie (ultimo valore di finestra), con fallback all'eventuale
+  // media pesata per-post. Il box "Reach + % non-follower" legge questo.
+  const nonFollowerPct =
+    seriesSummary["non_follower_pct"]?.latest ?? perf.avgNonFollowerPct;
+
+  // Engagement rate tile: `perf.engagementRate` (frazione) è calcolato dai post
+  // agganciati a Content. Quando nessun post è matchato (Content vuoto) resta null
+  // pur essendoci l'ER account reale nella serie Measurement (in %, come il chart):
+  // fallback a quello (÷100 → frazione, coerente con pct() del box).
+  if (perf.engagementRate == null) {
+    const erLatestPct = seriesSummary["engagement_rate"]?.latest;
+    if (erLatestPct != null) perf.engagementRate = erLatestPct / 100;
+  }
+
   const funnel = buildFunnel(perf, vc.length);
+
+  // Metriche dirette (ONDATA 1): 12 insight con delta per periodo + profilo (single value).
+  const insight = readInsightDeltas(directRows, filter.period);
+  const byDirect = new Map(directRows.map((r) => [r.metric, r.value]));
+  const profileMetric = (metric: string): DirectMetric => ({
+    value: byDirect.get(metric) ?? null,
+    deltaAbs: null,
+    deltaPct: null,
+  });
+  const directMetrics: Record<MetricKey, DirectMetric> = {
+    ...insight,
+    followers_direct: { value: end, deltaAbs: null, deltaPct: followerGrowth },
+    following: profileMetric("profile:following"),
+    media: profileMetric("profile:media"),
+    token_days: profileMetric("profile:token_days"),
+  };
+
+  // Rate a livello ACCOUNT dal periodo (account-insights) — usate come fallback nei box
+  // quando i post non sono agganciati a Content (perf.* = 0).
+  const accountReach = directMetrics.reach.value;
+  const accountSaveRate = saveRate(directMetrics.saves.value ?? 0, accountReach);
+  const accountShareRate = shareRate(directMetrics.shares.value ?? 0, accountReach);
 
   return {
     filter: { period: filter.period, channel: filter.channel },
@@ -400,6 +501,12 @@ export async function getKpiData(
       perf.totalReach || null
     ),
     reachRate: reachRateVal,
+    nonFollowerPct,
+    directMetrics,
+    accountReach,
+    accountSaveRate,
+    accountShareRate,
+    snapshot,
     publishedCount: contents.filter((c) => c.publishAt != null).length,
     valueConversations: vc.map((c) => ({
       id: c.id,
