@@ -300,6 +300,8 @@ export type KpiData = {
    * "Reach + % non-follower" legge QUESTO campo.
    */
   nonFollowerPct: number | null;
+  /** Metriche DIRETTE da Zernio (ONDATA 1): 12 insight + profilo, con delta per periodo. */
+  directMetrics: Record<MetricKey, DirectMetric>;
   publishedCount: number;
   valueConversations: {
     id: string;
@@ -358,6 +360,7 @@ export async function getKpiData(
     measurements,
     audienceSegments,
     seriesRows,
+    directRows,
   ] = await Promise.all([
     db.content.findMany({
       where: scopedWhere(workspaceId, {
@@ -410,6 +413,14 @@ export async function getKpiData(
     Promise.all(
       CHART_METRICS.map((m) => getMetricSeries(workspaceId, m, filter.channel))
     ),
+    db.measurement.findMany({
+      where: scopedWhere(workspaceId, {
+        series: "Luca",
+        ...channelWhere,
+        OR: [{ metric: { startsWith: "insight:" } }, { metric: { startsWith: "profile:" } }],
+      }),
+      select: { metric: true, value: true },
+    }),
   ]);
 
   const perf = aggregatePerformance(contents);
@@ -452,6 +463,22 @@ export async function getKpiData(
 
   const funnel = buildFunnel(perf, vc.length);
 
+  // Metriche dirette (ONDATA 1): 12 insight con delta per periodo + profilo (single value).
+  const insight = readInsightDeltas(directRows, filter.period);
+  const byDirect = new Map(directRows.map((r) => [r.metric, r.value]));
+  const profileMetric = (metric: string): DirectMetric => ({
+    value: byDirect.get(metric) ?? null,
+    deltaAbs: null,
+    deltaPct: null,
+  });
+  const directMetrics: Record<MetricKey, DirectMetric> = {
+    ...insight,
+    followers_direct: { value: end, deltaAbs: null, deltaPct: followerGrowth },
+    following: profileMetric("profile:following"),
+    media: profileMetric("profile:media"),
+    token_days: profileMetric("profile:token_days"),
+  };
+
   return {
     filter: { period: filter.period, channel: filter.channel },
     perf,
@@ -463,6 +490,7 @@ export async function getKpiData(
     ),
     reachRate: reachRateVal,
     nonFollowerPct,
+    directMetrics,
     publishedCount: contents.filter((c) => c.publishAt != null).length,
     valueConversations: vc.map((c) => ({
       id: c.id,
