@@ -13,13 +13,10 @@ describe("getConnectUrl", () => {
 
     const spy = vi.spyOn(global, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/accounts")) {
-        // profileId è oneOf string | Profile{_id}: qui l'oggetto.
+      if (url.includes("/profiles")) {
+        // getDefaultProfileId legge /profiles e sceglie il profilo isDefault.
         return json({
-          accounts: [
-            { _id: "acc_1", platform: "instagram", profileId: { _id: "prof_1" } },
-          ],
-          hasAnalyticsAccess: true,
+          profiles: [{ _id: "prof_1", isDefault: true }],
         });
       }
       return json({ authUrl: "https://zernio.com/oauth/xyz" });

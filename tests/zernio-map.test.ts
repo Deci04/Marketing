@@ -48,11 +48,36 @@ describe("mapAccountMeasurements", () => {
 });
 
 describe("mapAudienceSegments", () => {
-  it("preserva dimension/label/value e applica canale+data", () => {
+  it("normalizza i CONTEGGI grezzi a % PER DIMENSIONE (ogni dimensione somma ~100)", () => {
     const d = ymdToUtcMidnight("2026-07-01");
-    const out = mapAudienceSegments([{ dimension: "age", label: "25-34", value: 32 }], "INSTAGRAM", d);
-    expect(out[0]).toMatchObject({ dimension: "age", label: "25-34", value: 32, channel: "INSTAGRAM" });
-    expect(out[0].date).toBe(d);
+    // conteggi grezzi di persone (come li restituisce Zernio)
+    const out = mapAudienceSegments(
+      [
+        { dimension: "age", label: "18-24", value: 173 },
+        { dimension: "age", label: "25-34", value: 92 },
+        { dimension: "age", label: "35-44", value: 52 },
+        { dimension: "gender", label: "M", value: 219 },
+        { dimension: "gender", label: "F", value: 98 },
+      ],
+      "INSTAGRAM",
+      d
+    );
+    const age1824 = out.find((s) => s.dimension === "age" && s.label === "18-24")!;
+    expect(age1824).toMatchObject({ dimension: "age", label: "18-24", channel: "INSTAGRAM" });
+    expect(age1824.date).toBe(d);
+    // 173 / (173+92+52) * 100 = 54.57%
+    expect(age1824.value).toBeCloseTo(54.57, 1);
+    // ogni dimensione somma ~100%
+    const sum = (dim: string) =>
+      out.filter((s) => s.dimension === dim).reduce((a, s) => a + s.value, 0);
+    expect(sum("age")).toBeCloseTo(100, 5);
+    expect(sum("gender")).toBeCloseTo(100, 5);
+  });
+
+  it("dimensione con somma 0 → value 0 (niente divisione per zero)", () => {
+    const d = ymdToUtcMidnight("2026-07-01");
+    const out = mapAudienceSegments([{ dimension: "age", label: "18-24", value: 0 }], null, d);
+    expect(out[0].value).toBe(0);
   });
 });
 

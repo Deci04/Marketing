@@ -5,7 +5,7 @@ import { signOut } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isConfigured as googleConfigured } from "@/lib/google-calendar";
 import { isConfigured as zernioConfigured } from "@/lib/zernio";
-import { createWorkspaceAction } from "./actions";
+import { createWorkspaceAction, disconnectSocialAccountAction } from "./actions";
 import { TelegramLink } from "@/components/profilo/telegram-link";
 import {
   UsersThree,
@@ -274,9 +274,20 @@ export default async function ProfiloPage({
                       )}
                     </div>
                     {acc ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-sage px-2.5 py-1 text-[11px] font-medium text-sage-ink">
-                        <CheckCircle size={13} weight="fill" /> Collegato
-                      </span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-sage px-2.5 py-1 text-[11px] font-medium text-sage-ink">
+                          <CheckCircle size={13} weight="fill" /> Collegato
+                        </span>
+                        <form action={disconnectSocialAccountAction}>
+                          <input type="hidden" name="zernioAccountId" value={acc.zernioAccountId} />
+                          <button
+                            type="submit"
+                            className="rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-ink"
+                          >
+                            Disconnetti
+                          </button>
+                        </form>
+                      </div>
                     ) : (
                       <a
                         href={`/api/integrations/zernio/connect/${key}`}

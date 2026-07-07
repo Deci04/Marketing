@@ -223,12 +223,18 @@ async function fetchAccountMetrics(
   let nonFollowerPct: number | null = null;
   if (platform === "instagram" && accountId) {
     try {
+      // account-insights: la finestra max è 89 giorni → restringi a 88 (non 90).
+      const insightsSince = new Date(
+        new Date(`${toYmd}T00:00:00.000Z`).getTime() - 88 * 86_400_000
+      )
+        .toISOString()
+        .slice(0, 10);
       const q = new URLSearchParams({
         accountId,
         metrics: "reach",
         metricType: "total_value",
-        breakdown: "follower_type",
-        since: fromYmd,
+        breakdown: "follow_type", // Zernio: valore valido è "follow_type" (non "follower_type")
+        since: insightsSince,
         until: toYmd,
       });
       const res = await zernioFetch<ZernioAccountInsightsResponse>(
@@ -378,7 +384,17 @@ export function mapAudienceSegments(
   channel: Channel | null,
   date: Date
 ): AudienceSegmentUpsert[] {
-  return rows.map((r) => ({ date, dimension: r.dimension, label: r.label, value: r.value, channel }));
+  // Zernio espone CONTEGGI grezzi di persone per label (es. age 18-24 = 173, la
+  // somma di ogni dimensione ≈ follower totali). La dashboard (componente Bars)
+  // rende `value` come percentuale → normalizza a % PER DIMENSIONE così che ogni
+  // dimensione (age/gender/geo) sommi ~100%. value = count / sommaDimensione * 100.
+  const totals = new Map<string, number>();
+  for (const r of rows) totals.set(r.dimension, (totals.get(r.dimension) ?? 0) + r.value);
+  return rows.map((r) => {
+    const total = totals.get(r.dimension) ?? 0;
+    const value = total > 0 ? (r.value / total) * 100 : 0;
+    return { date, dimension: r.dimension, label: r.label, value, channel };
+  });
 }
 
 export type ContentPerfPatch = {
@@ -495,12 +511,14 @@ export async function ingestAnalytics(
  * ci sono account connessi (risposta reale osservata: `{"accounts":[],...}`).
  */
 export async function getDefaultProfileId(): Promise<string | null> {
-  const res = await zernioFetch<ZernioAccountsListResponse>("/accounts");
-  const first = res.accounts?.[0];
-  if (!first?.profileId) return null;
-  return typeof first.profileId === "string"
-    ? first.profileId
-    : first.profileId._id ?? null;
+  // Il profileId sta in GET /profiles (Zernio crea un profilo "Default"), NON in
+  // /accounts (vuoto finché non colleghi un social). Prendi il profilo isDefault.
+  const res = await zernioFetch<{
+    profiles?: { _id: string; isDefault?: boolean }[];
+  }>("/profiles");
+  const profiles = res.profiles ?? [];
+  const def = profiles.find((p) => p.isDefault) ?? profiles[0];
+  return def?._id ?? null;
 }
 
 /**
@@ -544,6 +562,13 @@ export async function saveSocialAccount(
       handle: data.handle ?? null,
     },
   });
+}
+
+/** Disconnette un account social lato Zernio: DELETE /accounts/{id}.
+ *  Best-effort (non lancia): la riga SocialAccount locale la cancella il chiamante. */
+export async function disconnectAccount(zernioAccountId: string): Promise<void> {
+  if (!isConfigured() || !zernioAccountId) return;
+  await zernioFetch(`/accounts/${zernioAccountId}`, { method: "DELETE" }).catch(() => {});
 }
 
 // --- Pubblicazione di un contenuto (filone W) ---

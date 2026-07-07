@@ -5,6 +5,7 @@ import { Role } from "@prisma/client";
 import { db } from "@/lib/db";
 import { currentUser } from "@/lib/current";
 import { setTelegramLinkCode } from "@/lib/telegram-link";
+import { disconnectAccount } from "@/lib/zernio";
 
 async function requireAdmin() {
   const u = await currentUser();
@@ -56,6 +57,16 @@ export async function generateTelegramLinkCodeAction() {
   const u = await currentUser();
   if (!u) throw new Error("Non autorizzato");
   await setTelegramLinkCode(u.id);
+  revalidatePath("/profilo");
+}
+
+/** Disconnette un account social: lo stacca da Zernio + rimuove la riga locale. Solo admin. */
+export async function disconnectSocialAccountAction(formData: FormData) {
+  await requireAdmin();
+  const zernioAccountId = String(formData.get("zernioAccountId") ?? "").trim();
+  if (!zernioAccountId) return;
+  await disconnectAccount(zernioAccountId);
+  await db.socialAccount.deleteMany({ where: { zernioAccountId } });
   revalidatePath("/profilo");
 }
 

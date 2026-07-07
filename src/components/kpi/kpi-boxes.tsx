@@ -176,7 +176,7 @@ export function KpiBox({
           </div>
           <div className="mt-1 text-3xl font-semibold text-ink">{int(data.perf.totalReach)}</div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <span>{pctFromPercent(data.perf.avgNonFollowerPct)} non-follower</span>
+            <span>{pctFromPercent(data.nonFollowerPct)} non-follower</span>
             <span>reach rate {ratio(data.reachRate)}</span>
           </div>
         </div>

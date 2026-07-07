@@ -253,6 +253,13 @@ export type KpiData = {
   followerLatest: number | null;
   conversionToConversation: number | null;
   reachRate: number | null;
+  /**
+   * % reach da non-follower (0..100), a livello ACCOUNT. Viene dal Measurement
+   * `non_follower_pct` (account-insights), non dai post: `mapPostMetrics` non lo
+   * espone per-post, quindi `perf.avgNonFollowerPct` resta null. Il box
+   * "Reach + % non-follower" legge QUESTO campo.
+   */
+  nonFollowerPct: number | null;
   publishedCount: number;
   valueConversations: {
     id: string;
@@ -388,6 +395,21 @@ export async function getKpiData(
 
   const reachRateVal = reachRate(perf.totalReach, end);
 
+  // non_follower_pct è account-level (Measurement), non per-post: prendilo dal
+  // riepilogo della serie (ultimo valore di finestra), con fallback all'eventuale
+  // media pesata per-post. Il box "Reach + % non-follower" legge questo.
+  const nonFollowerPct =
+    seriesSummary["non_follower_pct"]?.latest ?? perf.avgNonFollowerPct;
+
+  // Engagement rate tile: `perf.engagementRate` (frazione) è calcolato dai post
+  // agganciati a Content. Quando nessun post è matchato (Content vuoto) resta null
+  // pur essendoci l'ER account reale nella serie Measurement (in %, come il chart):
+  // fallback a quello (÷100 → frazione, coerente con pct() del box).
+  if (perf.engagementRate == null) {
+    const erLatestPct = seriesSummary["engagement_rate"]?.latest;
+    if (erLatestPct != null) perf.engagementRate = erLatestPct / 100;
+  }
+
   const funnel = buildFunnel(perf, vc.length);
 
   return {
@@ -400,6 +422,7 @@ export async function getKpiData(
       perf.totalReach || null
     ),
     reachRate: reachRateVal,
+    nonFollowerPct,
     publishedCount: contents.filter((c) => c.publishAt != null).length,
     valueConversations: vc.map((c) => ({
       id: c.id,
