@@ -103,3 +103,23 @@ describe("mapPostMetrics", () => {
     expect(patch.nonFollowerPct).toBeNull();
   });
 });
+
+describe("mapAudienceSegments — city + engaged", () => {
+  it("normalizza a % per-dimensione anche city e *_engaged", () => {
+    const date = new Date("2026-07-07T00:00:00.000Z");
+    const out = mapAudienceSegments(
+      [
+        { dimension: "city", label: "Roncade", value: 13 },
+        { dimension: "city", label: "Treviso", value: 7 },
+        { dimension: "age_engaged", label: "18-24", value: 182 },
+        { dimension: "age_engaged", label: "25-34", value: 18 },
+      ],
+      "INSTAGRAM",
+      date
+    );
+    const city = out.filter((r) => r.dimension === "city");
+    expect(Math.round(city.reduce((s, r) => s + r.value, 0))).toBe(100);
+    const eng = out.find((r) => r.dimension === "age_engaged" && r.label === "18-24");
+    expect(Math.round(eng!.value)).toBe(91); // 182/200
+  });
+});

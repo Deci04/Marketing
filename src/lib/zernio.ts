@@ -47,7 +47,9 @@ export type ZernioAccountMetrics = {
   nonFollowerPct: number | null;
 };
 export type ZernioDemographic = {
-  dimension: "age" | "gender" | "geo" | "followerType" | "activity" | "returning";
+  dimension:
+    | "age" | "gender" | "geo" | "followerType" | "activity" | "returning"
+    | "city" | "age_engaged" | "gender_engaged";
   label: string;
   value: number;
 };
@@ -271,29 +273,48 @@ async function fetchDemographics(
   platform: string | undefined
 ): Promise<ZernioDemographic[]> {
   if (platform !== "instagram" || !accountId) return [];
+  const out: ZernioDemographic[] = [];
+  const push = (
+    dim: ZernioDemographic["dimension"],
+    rows: { dimension: string; value: number }[] | undefined
+  ) => {
+    for (const r of rows ?? []) out.push({ dimension: dim, label: r.dimension, value: r.value });
+  };
+  // follower_demographics: age / gender / country(→geo) / city
   try {
-    const q = new URLSearchParams({ accountId, breakdown: "age,gender,country" });
+    const q = new URLSearchParams({
+      accountId,
+      breakdown: "age,gender,country,city",
+      metric: "follower_demographics",
+    });
     const res = await zernioFetch<ZernioDemographicsResponse>(
       `/analytics/instagram/demographics?${q.toString()}`
     );
     const d = res.demographics ?? {};
-    const out: ZernioDemographic[] = [];
-    const push = (
-      dim: ZernioDemographic["dimension"],
-      rows: { dimension: string; value: number }[] | undefined
-    ) => {
-      for (const r of rows ?? []) out.push({ dimension: dim, label: r.dimension, value: r.value });
-    };
     push("age", d.age);
     push("gender", d.gender);
-    // "geo" ← country (i codici paese sono più stabili delle città per il dashboard).
-    // TODO confermare con dati reali di Luca: eventualmente includere anche d.city.
     push("geo", d.country);
-    return out;
+    push("city", d.city);
   } catch (e) {
-    console.warn(`[zernio] demographics non disponibili: ${(e as Error).message}`);
-    return [];
+    console.warn(`[zernio] demographics follower non disponibili: ${(e as Error).message}`);
   }
+  // engaged_audience_demographics: chi interagisce (confronto follower-vs-engaged)
+  try {
+    const q = new URLSearchParams({
+      accountId,
+      breakdown: "age,gender",
+      metric: "engaged_audience_demographics",
+    });
+    const res = await zernioFetch<ZernioDemographicsResponse>(
+      `/analytics/instagram/demographics?${q.toString()}`
+    );
+    const d = res.demographics ?? {};
+    push("age_engaged", d.age);
+    push("gender_engaged", d.gender);
+  } catch (e) {
+    console.warn(`[zernio] demographics engaged non disponibili: ${(e as Error).message}`);
+  }
+  return out;
 }
 
 /** Metriche per-post da GET /v1/analytics (list paginata). */
