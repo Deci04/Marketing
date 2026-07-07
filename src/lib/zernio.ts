@@ -3,6 +3,7 @@
 import type { Channel } from "@prisma/client";
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
+import { INSIGHT_KEYS, type InsightKey } from "@/lib/kpi";
 
 export const ZERNIO_BASE = "https://zernio.com/api/v1";
 const key = () => process.env.ZERNIO_API_KEY ?? "";
@@ -349,11 +350,59 @@ export function platformToChannel(platform: string): Channel | null {
 
 export type MeasurementUpsert = {
   date: Date;
-  metric: "followers" | "engagement_rate" | "non_follower_pct";
+  // Stringa libera: oltre a followers/engagement_rate/non_follower_pct include i namespace
+  // dei dati diretti (ONDATA 1): `insight:<key>:p<period>:cur|:prev`, `profile:*`.
+  metric: string;
   value: number;
   series: "Luca";
   channel: Channel | null;
 };
+
+export type InsightWindow = {
+  period: number;
+  current: Partial<Record<InsightKey, number>>;
+  previous: Partial<Record<InsightKey, number>>;
+};
+
+/** Mapper puro: finestre corrente/precedente per periodo → righe Measurement namespaced.
+ *  Scrive `insight:<key>:p<period>:cur|:prev`. Conserva gli 0 reali; salta gli undefined. */
+export function mapDirectInsights(
+  windows: InsightWindow[],
+  channel: Channel | null,
+  date: Date
+): MeasurementUpsert[] {
+  const out: MeasurementUpsert[] = [];
+  for (const w of windows) {
+    for (const key of INSIGHT_KEYS) {
+      const cur = w.current[key];
+      if (cur != null)
+        out.push({ metric: `insight:${key}:p${w.period}:cur`, value: cur, date, series: "Luca", channel });
+      const prev = w.previous[key];
+      if (prev != null)
+        out.push({ metric: `insight:${key}:p${w.period}:prev`, value: prev, date, series: "Luca", channel });
+    }
+  }
+  return out;
+}
+
+export type AccountProfile = {
+  following: number | null;
+  mediaCount: number | null;
+  tokenDays: number | null;
+};
+
+/** Mapper puro: snapshot profilo → righe Measurement `profile:*` (single-value). */
+export function mapProfile(
+  p: AccountProfile,
+  channel: Channel | null,
+  date: Date
+): MeasurementUpsert[] {
+  const out: MeasurementUpsert[] = [];
+  if (p.following != null) out.push({ metric: "profile:following", value: p.following, date, series: "Luca", channel });
+  if (p.mediaCount != null) out.push({ metric: "profile:media", value: p.mediaCount, date, series: "Luca", channel });
+  if (p.tokenDays != null) out.push({ metric: "profile:token_days", value: p.tokenDays, date, series: "Luca", channel });
+  return out;
+}
 export function mapAccountMeasurements(
   rows: ZernioAccountMetrics[],
   channel: Channel | null
