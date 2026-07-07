@@ -3,6 +3,9 @@
 // Vengono raccolti in un unico blob `ZernioSnapshotData` salvato come Json (modello
 // ZernioSnapshot, upsert per workspace). Mapper PURI (testabili senza rete) + fetcher.
 
+import type { Channel, Prisma } from "@prisma/client";
+import { db } from "@/lib/db";
+import { scopedWhere } from "@/lib/workspace";
 import { zernioFetch } from "@/lib/zernio";
 
 // --- Forma tipizzata dello snapshot (ciò che salviamo/leggiamo) ---
@@ -249,4 +252,37 @@ export async function buildSnapshot(params: {
     ),
   ]);
   return { posts, bestTime, postingFrequency, contentDecay, followerHistory };
+}
+
+// --- Persistenza (upsert per workspace+channel) ---
+
+export async function writeZernioSnapshot(
+  workspaceId: string,
+  channel: Channel | null,
+  data: ZernioSnapshotData
+): Promise<void> {
+  const existing = await db.zernioSnapshot.findFirst({
+    where: scopedWhere(workspaceId, { channel }),
+    select: { id: true },
+  });
+  const json = data as unknown as Prisma.InputJsonValue;
+  if (existing) {
+    await db.zernioSnapshot.update({ where: { id: existing.id }, data: { data: json, takenAt: new Date() } });
+  } else {
+    await db.zernioSnapshot.create({ data: { workspaceId, channel, data: json } });
+  }
+}
+
+/** Legge lo snapshot per il canale (o cross-canale se channel null). Ritorna vuoto se assente. */
+export async function readZernioSnapshot(
+  workspaceId: string,
+  channel: Channel | null
+): Promise<ZernioSnapshotData> {
+  const row = await db.zernioSnapshot.findFirst({
+    where: scopedWhere(workspaceId, channel != null ? { channel } : {}),
+    orderBy: { takenAt: "desc" },
+    select: { data: true },
+  });
+  if (!row?.data) return EMPTY_SNAPSHOT;
+  return { ...EMPTY_SNAPSHOT, ...(row.data as unknown as Partial<ZernioSnapshotData>) };
 }

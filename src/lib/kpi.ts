@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
 import { engagementRate } from "@/lib/content";
+import { readZernioSnapshot, type ZernioSnapshotData } from "@/lib/zernio-snapshot";
 import type { Channel } from "@prisma/client";
 
 export type SeriesPoint = {
@@ -301,6 +302,8 @@ export type KpiData = {
   /** Save/Share rate a livello account (saves|shares / reach account), frazione 0..1. */
   accountSaveRate: number | null;
   accountShareRate: number | null;
+  /** ONDATA 2: snapshot ricco (classifica post, best-time, freq, decay, follower). */
+  snapshot: ZernioSnapshotData;
   publishedCount: number;
   valueConversations: {
     id: string;
@@ -360,6 +363,7 @@ export async function getKpiData(
     audienceSegments,
     seriesRows,
     directRows,
+    snapshot,
   ] = await Promise.all([
     db.content.findMany({
       where: scopedWhere(workspaceId, {
@@ -422,6 +426,7 @@ export async function getKpiData(
       }),
       select: { metric: true, value: true },
     }),
+    readZernioSnapshot(workspaceId, filter.channel !== "ALL" ? filter.channel : null),
   ]);
 
   const perf = aggregatePerformance(contents);
@@ -501,6 +506,7 @@ export async function getKpiData(
     accountReach,
     accountSaveRate,
     accountShareRate,
+    snapshot,
     publishedCount: contents.filter((c) => c.publishAt != null).length,
     valueConversations: vc.map((c) => ({
       id: c.id,

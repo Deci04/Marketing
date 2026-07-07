@@ -19,6 +19,7 @@ import {
   type InsightWindow,
 } from "@/lib/zernio";
 import { PERIOD_PRESETS } from "@/lib/kpi";
+import { buildSnapshot, writeZernioSnapshot } from "@/lib/zernio-snapshot";
 import type { Channel, Prisma } from "@prisma/client";
 
 function num(v: FormDataEntryValue | null): number | null {
@@ -345,6 +346,15 @@ export async function refreshKpiAction(): Promise<{
           ...mapProfile(profile, channel, snapDate),
         ]);
         total = { ...total, measurements: total.measurements + written };
+
+        // ONDATA 2: snapshot ricco (classifica post, best-time, freq, decay, follower).
+        const snapshot = await buildSnapshot({
+          accountId: acc.zernioAccountId,
+          platform: acc.platform,
+          fromYmd: ymd(new Date(now.getTime() - 88 * 86_400_000)),
+          toYmd: to,
+        });
+        await writeZernioSnapshot(ctx.workspaceId, channel, snapshot);
       }
     } catch (e) {
       return { ok: false, error: `Zernio: ${(e as Error).message}` };
