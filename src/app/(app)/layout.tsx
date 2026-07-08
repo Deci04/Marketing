@@ -6,6 +6,7 @@ import { unreadCount } from "@/lib/activity";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { NotificationBell } from "@/components/notification-bell";
 import { ChatPanel } from "@/components/chat/chat-panel";
+import { MobileTopBar } from "@/components/mobile-topbar";
 import { NoWorkspace } from "@/components/no-workspace";
 import { SignOut } from "@phosphor-icons/react/dist/ssr";
 
@@ -31,9 +32,20 @@ export default async function AppLayout({
     ctx.user.notificationsSeenAt ?? null
   );
 
+  const signOutAction = async () => {
+    "use server";
+    await signOut({ redirectTo: "/login" });
+  };
+
   return (
-    <div className="flex min-h-screen gap-2 p-3">
-      <div className="relative w-16 shrink-0">
+    <div className="flex min-h-screen flex-col md:flex-row md:gap-2 md:p-3">
+      <MobileTopBar
+        workspaceInitial={wsInitial}
+        userName={name}
+        unread={unread}
+        signOutAction={signOutAction}
+      />
+      <div className="relative hidden w-16 shrink-0 md:block">
         <aside className="absolute left-0 top-0 z-30 flex h-[calc(100vh-1.5rem)] flex-col gap-2">
           <div
             className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink font-heading text-lg text-paper shadow-md"
@@ -53,12 +65,7 @@ export default async function AppLayout({
             >
               {initials}
             </Link>
-            <form
-              action={async () => {
-                "use server";
-                await signOut({ redirectTo: "/login" });
-              }}
-            >
+            <form action={signOutAction}>
               <button
                 aria-label="Esci"
                 className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-paper text-ink/55 transition-colors hover:bg-secondary hover:text-ink"
@@ -70,7 +77,7 @@ export default async function AppLayout({
         </aside>
       </div>
 
-      <main className="min-w-0 flex-1 py-2 pl-1">{children}</main>
+      <main className="min-w-0 flex-1 px-3 pb-4 pt-3 md:px-0 md:py-2 md:pl-1">{children}</main>
       {modal}
       <ChatPanel userName={name} />
     </div>

@@ -11,7 +11,7 @@ import {
   NotePencil,
 } from "@phosphor-icons/react";
 
-const NAV = [
+export const NAV = [
   { href: "/home", label: "Home", Icon: House },
   { href: "/calendario", label: "Calendario", Icon: CalendarBlank },
   { href: "/contenuti", label: "Contenuti", Icon: SquaresFour },
