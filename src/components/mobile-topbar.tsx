@@ -3,20 +3,22 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { List, X, Bell, SignOut, UserCircle, Check } from "@phosphor-icons/react";
+import { List, X, Bell, UserCircle, Check } from "@phosphor-icons/react";
 import { NAV } from "./sidebar-nav";
 
-/** Barra mobile (top) con menu aree a scomparsa. Nascosta da `md` in su (c'è il rail). */
+/** Barra mobile (top) con menu aree a scomparsa. Nascosta da `md` in su (c'è il rail).
+ *  `logoutSlot` è il form di logout renderizzato lato server (evita di passare una
+ *  server action come prop a un client component — rischioso su questo Next). */
 export function MobileTopBar({
   workspaceInitial,
   userName,
   unread,
-  signOutAction,
+  logoutSlot,
 }: {
   workspaceInitial: string;
   userName: string;
   unread: number;
-  signOutAction: () => void;
+  logoutSlot: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -96,12 +98,7 @@ export function MobileTopBar({
                 <UserCircle size={20} className="shrink-0" />
                 <span className="truncate">Profilo · {userName}</span>
               </Link>
-              <form action={signOutAction}>
-                <button className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-base text-ink/70 transition-colors hover:bg-secondary">
-                  <SignOut size={20} className="shrink-0" />
-                  Esci
-                </button>
-              </form>
+              <div onClick={() => setOpen(false)}>{logoutSlot}</div>
             </nav>
           </div>
         </div>

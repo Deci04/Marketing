@@ -43,7 +43,14 @@ export default async function AppLayout({
         workspaceInitial={wsInitial}
         userName={name}
         unread={unread}
-        signOutAction={signOutAction}
+        logoutSlot={
+          <form action={signOutAction}>
+            <button className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-base text-ink/70 transition-colors hover:bg-secondary">
+              <SignOut size={20} className="shrink-0" />
+              Esci
+            </button>
+          </form>
+        }
       />
       <div className="relative hidden w-16 shrink-0 md:block">
         <aside className="absolute left-0 top-0 z-30 flex h-[calc(100vh-1.5rem)] flex-col gap-2">
