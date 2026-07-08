@@ -304,6 +304,29 @@ export function DashboardGrid({
 
   const hiddenBoxes = BOX_CATALOG.filter((b) => layout.hidden.includes(b.id));
 
+  // Sotto questa larghezza la griglia 12-col è inusabile → stack a colonna singola (no drag).
+  const isMobile = width > 0 && width < 640;
+
+  // Renderer condiviso tra griglia (desktop) e stack (mobile).
+  const renderCard = (it: GridItem, mobile: boolean) => {
+    const isMetric = it.i.startsWith("mc:");
+    const card = isMetric ? layout.metricCards.find((m) => m.i === it.i) : null;
+    if (isMetric && card) {
+      return (
+        <MetricCard
+          cardId={card.i}
+          metrics={card.metrics}
+          data={data}
+          title={card.metrics.length > 1 ? metricCardTitle(card) : undefined}
+          onSplit={applySplit}
+          onRemove={applyRemove}
+          mergeState={!mobile && mergeUI.target === card.i ? (mergeUI.armed ? "armed" : "hover") : null}
+        />
+      );
+    }
+    return <KpiBox id={it.i as BoxId} data={data} onManage={setEditor} />;
+  };
+
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
@@ -322,7 +345,22 @@ export function DashboardGrid({
       </div>
 
       <div ref={containerRef}>
-        {width > 0 && (
+        {isMobile && (
+          <div className="space-y-3">
+            {[...visibleItems]
+              .sort((a, b) => a.y - b.y || a.x - b.x)
+              .map((it) => (
+                <div
+                  key={it.i}
+                  className="overflow-hidden"
+                  style={{ height: it.h * ROW_HEIGHT + (it.h - 1) * MARGIN[1] }}
+                >
+                  {renderCard(it, true)}
+                </div>
+              ))}
+          </div>
+        )}
+        {width > 0 && !isMobile && (
           <GridLayout
             className="layout"
             layout={visibleItems}
@@ -337,7 +375,6 @@ export function DashboardGrid({
           >
             {visibleItems.map((it) => {
               const isMetric = it.i.startsWith("mc:");
-              const card = isMetric ? layout.metricCards.find((m) => m.i === it.i) : null;
               return (
                 <div key={it.i} className="group/box relative">
                   <div className="absolute -top-1 right-1 z-20 flex translate-y-1 items-center gap-1 opacity-0 transition-opacity group-hover/box:opacity-100">
@@ -355,23 +392,7 @@ export function DashboardGrid({
                       </button>
                     )}
                   </div>
-                  <div className="h-full overflow-hidden">
-                    {isMetric && card ? (
-                      <MetricCard
-                        cardId={card.i}
-                        metrics={card.metrics}
-                        data={data}
-                        title={card.metrics.length > 1 ? metricCardTitle(card) : undefined}
-                        onSplit={applySplit}
-                        onRemove={applyRemove}
-                        mergeState={
-                          mergeUI.target === card.i ? (mergeUI.armed ? "armed" : "hover") : null
-                        }
-                      />
-                    ) : (
-                      <KpiBox id={it.i as BoxId} data={data} onManage={setEditor} />
-                    )}
-                  </div>
+                  <div className="h-full overflow-hidden">{renderCard(it, false)}</div>
                 </div>
               );
             })}

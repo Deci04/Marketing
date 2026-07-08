@@ -542,7 +542,7 @@ export function ContentModal({
                           <p className="mt-1 text-[15px] text-ink">&ldquo;{content.hook}&rdquo;</p>
                         </div>
                       )}
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
                           <div className="text-xs text-muted-foreground">Pubblicazione</div>
                           <p className="mt-1 text-sm text-ink">{fmtDate(content.publishAt)}</p>
@@ -705,7 +705,7 @@ export function ContentModal({
                     className="space-y-3"
                   >
                     <input type="hidden" name="id" value={content.id} />
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
                       <PerfField name="views" label="Views" value={content.views} />
                       <PerfField name="reach" label="Reach" value={content.reach} />
                       <PerfField

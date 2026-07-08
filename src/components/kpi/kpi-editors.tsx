@@ -214,7 +214,7 @@ function ValueConversationsEditor({ items, onClose }: { items: VC[]; onClose: ()
           className="mt-5 space-y-3 rounded-2xl border border-border bg-secondary/30 p-4"
         >
           <input type="hidden" name="id" value={edit?.id ?? ""} />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={label}>Chi</label>
               <input name="who" required defaultValue={edit?.who ?? ""} className={field} />
@@ -228,7 +228,7 @@ function ValueConversationsEditor({ items, onClose }: { items: VC[]; onClose: ()
             <label className={label}>Cosa</label>
             <input name="what" required defaultValue={edit?.what ?? ""} className={field} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={label}>Canale</label>
               <input name="channel" placeholder="Instagram / DM…" defaultValue={edit?.channel ?? ""} className={field} />
@@ -298,7 +298,7 @@ function MeasurementsEditor({ items, onClose }: { items: Measurement[]; onClose:
           className="mt-5 space-y-3 rounded-2xl border border-border bg-secondary/30 p-4"
         >
           <input type="hidden" name="id" value={edit?.id ?? ""} />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={label}>Metrica</label>
               <input name="metric" required placeholder="followers / engagement_rate…" defaultValue={edit?.metric ?? ""} className={field} />
@@ -308,7 +308,7 @@ function MeasurementsEditor({ items, onClose }: { items: Measurement[]; onClose:
               <input name="value" type="number" step="any" required defaultValue={edit?.value ?? ""} className={field} />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className={label}>Serie</label>
               <select name="series" defaultValue={edit?.series ?? "Luca"} className={field}>
@@ -380,7 +380,7 @@ function BenchmarksEditor({ items, onClose }: { items: Benchmark[]; onClose: () 
           className="mt-5 space-y-3 rounded-2xl border border-border bg-secondary/30 p-4"
         >
           <input type="hidden" name="id" value={edit?.id ?? ""} />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={label}>Metrica</label>
               <input name="metric" required defaultValue={edit?.metric ?? ""} className={field} />
@@ -390,7 +390,7 @@ function BenchmarksEditor({ items, onClose }: { items: Benchmark[]; onClose: () 
               <input name="value" type="number" step="any" required defaultValue={edit?.value ?? ""} className={field} />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className={label}>Range</label>
               <input name="rangeLabel" placeholder="3-5%" defaultValue={edit?.rangeLabel ?? ""} className={field} />
@@ -466,7 +466,7 @@ function AudienceEditor({ items, onClose }: { items: Segment[]; onClose: () => v
           className="mt-5 space-y-3 rounded-2xl border border-border bg-secondary/30 p-4"
         >
           <input type="hidden" name="id" value={edit?.id ?? ""} />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={label}>Dimensione</label>
               <select name="dimension" defaultValue={edit?.dimension ?? "age"} className={field}>
@@ -480,7 +480,7 @@ function AudienceEditor({ items, onClose }: { items: Segment[]; onClose: () => v
               <input name="label" required placeholder="25-34 / F / Italia / lun 18-21" defaultValue={edit?.label ?? ""} className={field} />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className={label}>Valore (%)</label>
               <input name="value" type="number" step="any" required defaultValue={edit?.value ?? ""} className={field} />
