@@ -128,6 +128,11 @@ const PLATFORMS = [
   { id: "TIKTOK", label: "TikTok", Logo: TiktokLogo },
 ] as const;
 
+// Filone W: la pubblicazione dalla piattaforma è implementata (dietro dry-run) ma
+// NON ancora attivata in UI. Il bottone COMPARE su contenuto Confermato ma resta
+// disabilitato finché non si mette `true` (e si valida l'endpoint reale Zernio).
+const PUBLISH_FROM_PLATFORM_ENABLED = false;
+
 /**
  * Filone W — pannello di pubblicazione. Visibile solo per contenuto CONFERMATO.
  * Qualità non negoziabile: si pubblica SEMPRE l'originale a piena qualità, MAI il
@@ -224,17 +229,28 @@ function PublishPanel({
           <p className="mt-0.5 text-sm text-ink">
             {state === "failed"
               ? "Ultimo tentativo fallito — riprova (l'originale è conservato)."
-              : "Contenuto confermato: pronto per la pubblicazione."}
+              : PUBLISH_FROM_PLATFORM_ENABLED
+                ? "Contenuto confermato: pronto per la pubblicazione."
+                : "Contenuto confermato — pubblicazione dalla piattaforma in arrivo."}
           </p>
         </div>
-        {!open && (
-          <button
-            onClick={() => setOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98]"
-          >
-            <RocketLaunch size={15} weight="fill" /> Pubblica
-          </button>
-        )}
+        {!open &&
+          (PUBLISH_FROM_PLATFORM_ENABLED ? (
+            <button
+              onClick={() => setOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98]"
+            >
+              <RocketLaunch size={15} weight="fill" /> Pubblica
+            </button>
+          ) : (
+            <button
+              disabled
+              title="Non ancora attiva"
+              className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-muted-foreground opacity-70"
+            >
+              <RocketLaunch size={15} weight="fill" /> Pubblica (presto)
+            </button>
+          ))}
       </div>
 
       {open && (
