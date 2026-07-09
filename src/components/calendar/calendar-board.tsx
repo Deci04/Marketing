@@ -153,10 +153,77 @@ export function CalendarBoard({
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-lavender" /> Consegna Matteo</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-sage" /> Pubblicazione</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-butter" /> Evento</span>
-        <span className="text-muted-foreground/70">· clic su un giorno per creare contenuto o evento · trascina per spostare, × per eliminare</span>
+        <span className="text-muted-foreground/70">· clic su un giorno per creare contenuto o evento<span className="hidden md:inline"> · trascina per spostare, × per eliminare</span></span>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      {/* --- Mobile: vista agenda (la griglia 7-col è illeggibile su schermo stretto) --- */}
+      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card md:hidden">
+        {weeks
+          .flat()
+          .filter((c) => c.inMonth)
+          .map((cell) => {
+            const dayItems = byDay.get(cell.ymd) ?? [];
+            const wd = new Date(cell.ymd + "T00:00:00.000Z").getUTCDay();
+            const dow = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"][wd];
+            const block = blocks.find((b) => cell.ymd >= b.start && cell.ymd <= b.end);
+            return (
+              <div key={cell.ymd} className={cell.isToday ? "bg-primary/5" : ""}>
+                <div className="flex items-center gap-3 px-3 py-2.5">
+                  <button
+                    onClick={() => setInlineDay(cell.ymd)}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  >
+                    <span className="w-9 shrink-0 text-center">
+                      <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">{dow}</span>
+                      <span
+                        className={`block text-lg leading-tight ${
+                          cell.isToday ? "font-bold text-primary" : "text-ink"
+                        }`}
+                      >
+                        {cell.day}
+                      </span>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      {block && (
+                        <span className="block truncate text-[11px] text-muted-foreground">Blocco · {block.label}</span>
+                      )}
+                      {dayItems.length === 0 && !block && (
+                        <span className="text-xs text-muted-foreground/50">Tocca per aggiungere</span>
+                      )}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setInlineDay(cell.ymd)}
+                    aria-label="Aggiungi in questo giorno"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-paper text-ink/60 active:scale-95"
+                  >
+                    <Plus size={15} weight="bold" />
+                  </button>
+                </div>
+                {dayItems.length > 0 && (
+                  <div className="space-y-1.5 px-3 pb-3 pl-[3.75rem]">
+                    {dayItems.map((it) => {
+                      const Logo = it.channel === "YOUTUBE" ? YoutubeLogo : InstagramLogo;
+                      return (
+                        <button
+                          key={`${it.refType}:${it.refId}`}
+                          onClick={() => setSelected(it)}
+                          className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[13px] font-medium ${chipTone(it)}`}
+                          title={it.label}
+                        >
+                          {it.channel && <Logo size={13} weight="fill" className="shrink-0" />}
+                          <span className="min-w-0 flex-1 truncate">{cleanTitle(it)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block">
         <div className="grid grid-cols-7 border-b border-border">
           {DOW.map((d) => (
             <div key={d} className="px-2 py-2 text-center text-xs text-muted-foreground">{d}</div>
@@ -376,7 +443,7 @@ export function CalendarBoard({
                   onClick={() => setSelected(null)}
                 />
                 <motion.aside
-                  className="absolute bottom-3 right-3 top-3 flex w-80 flex-col overflow-y-auto rounded-3xl border border-border bg-paper p-5 shadow-[0_24px_60px_rgba(26,24,19,0.22)]"
+                  className="absolute inset-x-3 bottom-3 top-3 flex flex-col overflow-y-auto rounded-3xl border border-border bg-paper p-5 shadow-[0_24px_60px_rgba(26,24,19,0.22)] md:left-auto md:right-3 md:w-80"
                   initial={{ x: 340 }}
                   animate={{ x: 0 }}
                   exit={{ x: 340 }}
