@@ -1,20 +1,14 @@
-export type WorkflowState =
-  | "Da consegnare"
-  | "Da revisionare"
-  | "Da confermare"
-  | "Confermato";
+export type WorkflowState = "Da fare" | "Da revisionare" | "Confermato";
 
-/** Collaboration lifecycle based on real events (not just dates):
- *  Luca delivers material → Matteo uploads the montato → Luca confirms. */
+/** Ciclo di collaborazione basato su eventi reali:
+ *  Matteo crea e carica il contenuto → Luca lo revisiona/conferma. */
 export function workflowState(c: {
-  deliveredAt: Date | null;
   confirmedAt: Date | null;
   hasMontato: boolean;
 }): WorkflowState {
   if (c.confirmedAt) return "Confermato";
-  if (c.hasMontato) return "Da confermare";
-  if (c.deliveredAt) return "Da revisionare";
-  return "Da consegnare";
+  if (c.hasMontato) return "Da revisionare";
+  return "Da fare";
 }
 
 const DAY_MS = 86_400_000;
@@ -35,7 +29,6 @@ export type HomeContent = {
   id: string;
   title: string;
   format: string | null;
-  deliveredAt: Date | null;
   confirmedAt: Date | null;
   hasMontato: boolean;
   block: { lucaDeliveryAt: Date | null } | null;
@@ -85,7 +78,7 @@ export function lucaDeadlineGroups(
 ): DeadlineGroup[] {
   const buckets = new Map<number, HomeContent[]>();
   for (const c of contents) {
-    if (workflowState(c) !== "Da consegnare") continue;
+    if (workflowState(c) !== "Da fare") continue;
     const dl = c.block?.lucaDeliveryAt;
     if (!dl) continue;
     const d = daysUntil(dl, now);
@@ -154,15 +147,15 @@ export function homeActions(
   now: Date
 ): HomeAction[] {
   if (role === "matteo") {
-    const toReview = contents.filter((c) => workflowState(c) === "Da revisionare");
-    if (!toReview.length) return [];
+    const toDo = contents.filter((c) => workflowState(c) === "Da fare");
+    if (!toDo.length) return [];
     return [
       {
-        key: "review",
+        key: "todo",
         emoji: "🎬",
-        text: `${toReview.length} material${toReview.length === 1 ? "e" : "i"} da revisionare`,
+        text: `${toDo.length} ${toDo.length === 1 ? "contenuto" : "contenuti"} da montare`,
         urgency: 50,
-        contentIds: toReview.map((c) => c.id),
+        contentIds: toDo.map((c) => c.id),
       },
     ];
   }
@@ -176,14 +169,14 @@ export function homeActions(
     contentIds: g.contentIds,
   }));
 
-  const toConfirm = contents.filter((c) => workflowState(c) === "Da confermare");
-  if (toConfirm.length) {
+  const toReview = contents.filter((c) => workflowState(c) === "Da revisionare");
+  if (toReview.length) {
     actions.push({
-      key: "confirm",
+      key: "review",
       emoji: "✅",
-      text: `${toConfirm.length} montat${toConfirm.length === 1 ? "o" : "i"} da confermare`,
+      text: `${toReview.length} montat${toReview.length === 1 ? "o" : "i"} da revisionare`,
       urgency: 100, // dopo le deadline imminenti
-      contentIds: toConfirm.map((c) => c.id),
+      contentIds: toReview.map((c) => c.id),
     });
   }
 

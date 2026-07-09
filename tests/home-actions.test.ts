@@ -47,7 +47,6 @@ function daConsegnare(
     id,
     title: `c-${id}`,
     format,
-    deliveredAt: null,
     confirmedAt: null,
     hasMontato: false,
     block: deliveryYmd
@@ -101,32 +100,32 @@ describe("lucaDeadlineGroups", () => {
     expect(groups[0]).toMatchObject({ daysUntil: -1, count: 2, noun: "contenuti" });
   });
 
-  it("ignora i contenuti che non sono più 'Da consegnare'", () => {
-    const consegnato: HomeContent = {
+  it("ignora i contenuti già montati (non più 'Da fare')", () => {
+    const montato: HomeContent = {
       ...daConsegnare("x", "REEL", "2026-07-06"),
-      deliveredAt: new Date(), // ora è 'Da revisionare'
+      hasMontato: true, // ora è 'Da revisionare'
     };
-    expect(lucaDeadlineGroups([consegnato], NOW)).toHaveLength(0);
+    expect(lucaDeadlineGroups([montato], NOW)).toHaveLength(0);
   });
 });
 
-function daConfermare(id: string): HomeContent {
+// Contenuto montato e non confermato → stato "Da revisionare" (tocca a Luca).
+function daRevisionareLuca(id: string): HomeContent {
   return {
     id,
     title: `m-${id}`,
     format: "REEL",
-    deliveredAt: new Date(),
     confirmedAt: null,
     hasMontato: true,
     block: null,
   };
 }
-function daRevisionare(id: string): HomeContent {
+// Contenuto senza montato → stato "Da fare" (tocca a Matteo).
+function daFare(id: string): HomeContent {
   return {
     id,
     title: `r-${id}`,
     format: "REEL",
-    deliveredAt: new Date(),
     confirmedAt: null,
     hasMontato: false,
     block: null,
@@ -134,36 +133,36 @@ function daRevisionare(id: string): HomeContent {
 }
 
 describe("homeActions", () => {
-  it("Matteo (admin) vede solo i materiali da revisionare, tono imperativo", () => {
+  it("Matteo vede i 'Da fare' come contenuti da montare, tono imperativo", () => {
     const actions = homeActions(
-      [daRevisionare("1"), daRevisionare("2"), daConfermare("3")],
+      [daFare("1"), daFare("2"), daRevisionareLuca("3")],
       "matteo",
       NOW
     );
     expect(actions).toHaveLength(1);
     expect(actions[0]).toMatchObject({ emoji: "🎬", contentIds: ["1", "2"] });
-    expect(actions[0].text).toBe("2 materiali da revisionare");
+    expect(actions[0].text).toBe("2 contenuti da montare");
   });
 
-  it("Luca vede deadline aggregate (più urgente prima) poi i montati da confermare", () => {
+  it("Luca vede deadline aggregate (più urgente prima) poi i montati da revisionare", () => {
     const actions = homeActions(
       [
         daConsegnare("a", "REEL", "2026-07-08"),
         daConsegnare("b", "REEL", "2026-07-08"),
         daConsegnare("c", "REEL", "2026-07-08"),
         daConsegnare("d", "REEL", "2026-07-08"),
-        daConfermare("m1"),
-        daConfermare("m2"),
+        daRevisionareLuca("m1"),
+        daRevisionareLuca("m2"),
       ],
       "luca",
       NOW
     );
     expect(actions).toHaveLength(2);
-    // deadline prima (urgency = giorni), conferma dopo
+    // deadline prima (urgency = giorni), revisione dopo
     expect(actions[0]).toMatchObject({ emoji: "⏳" });
     expect(actions[0].text).toBe("Hai 4 giorni per consegnare i prossimi 4 Reel");
     expect(actions[1]).toMatchObject({ emoji: "✅" });
-    expect(actions[1].text).toBe("2 montati da confermare");
+    expect(actions[1].text).toBe("2 montati da revisionare");
   });
 
   it("frasi imperative al singolare per 1 giorno / oggi / in ritardo (mai 'i prossimi 1')", () => {
