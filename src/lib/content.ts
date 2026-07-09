@@ -226,6 +226,78 @@ export function engagementRate(c: {
   return interactions / c.reach;
 }
 
+// --- Vista Contenuti unificata (Archivio fuso dentro Contenuti) ---
+
+export type Stato = "lavorazione" | "pubblicati" | "tutti";
+
+/** Legge ?stato= dai searchParams; default "lavorazione". */
+export function parseStato(v: string | string[] | undefined): Stato {
+  const s = Array.isArray(v) ? v[0] : v;
+  return s === "pubblicati" || s === "tutti" ? s : "lavorazione";
+}
+
+/** Insieme di contenuti da mostrare per il filtro di stato scelto. */
+export function contentsForStato<T extends ArchivableContent>(
+  contents: T[],
+  stato: Stato,
+  now: Date = new Date()
+): T[] {
+  if (stato === "tutti") return contents;
+  const { active, archived } = splitActiveArchived(contents, now);
+  return stato === "pubblicati" ? archived : active;
+}
+
+/** Shape minima per costruire una riga della tabella archivio (da listContents). */
+type RowSource = ArchivableContent & {
+  id: string;
+  title: string;
+  channel: "INSTAGRAM" | "YOUTUBE";
+  format?: ContentFormat | null;
+  classes: { id: string; name: string; color: string | null }[];
+  publishAt?: Date | null;
+  reach?: number | null;
+  likes?: number | null;
+  commentsCount?: number | null;
+  saves?: number | null;
+  shares?: number | null;
+  views?: number | null;
+};
+
+/** Riga compatibile con <ArchiveTable rows> (vedi archive-table.tsx). */
+export type ArchiveRowData = {
+  id: string;
+  title: string;
+  channel: "INSTAGRAM" | "YOUTUBE";
+  format: ContentFormat | null;
+  classes: { id: string; name: string; color: string | null }[];
+  status: string;
+  publishAt: string | null;
+  views: number | null;
+  er: number | null;
+};
+
+/** Mappa i contenuti in righe archivio ordinabili (DRY tra /contenuti e la ex /archivio). */
+export function toArchiveRows(contents: RowSource[]): ArchiveRowData[] {
+  return contents.map((c) => {
+    const er = engagementRate(c);
+    return {
+      id: c.id,
+      title: c.title,
+      channel: c.channel,
+      format: c.format ?? null,
+      classes: c.classes.map((cl) => ({ id: cl.id, name: cl.name, color: cl.color })),
+      status: effectiveStatus(c.statusOverride ?? null, {
+        publishAt: c.publishAt ?? null,
+        lucaDeliveryAt: c.block?.lucaDeliveryAt ?? null,
+        matteoDeliveryAt: c.block?.matteoDeliveryAt ?? null,
+      }),
+      publishAt: c.publishAt ? c.publishAt.toISOString() : null,
+      views: c.views ?? null,
+      er: er != null ? Math.round(er * 1000) / 10 : null,
+    };
+  });
+}
+
 export async function updateContent(
   workspaceId: string,
   id: string,

@@ -44,16 +44,15 @@ export function ContentCard({ content }: { content: CardContent }) {
   const fmt = formatLabel(content.format);
   const classes = content.classes ?? [];
   const wf = workflowState({
-    deliveredAt: content.deliveredAt ?? null,
     confirmedAt: content.confirmedAt ?? null,
     hasMontato: content.videoProxyUrl != null || (content._count?.materials ?? 0) > 0,
   });
   const wfChip =
-    wf === "Da revisionare"
+    wf === "Da fare"
       ? "bg-butter text-butter-ink"
-      : wf === "Da confermare"
+      : wf === "Da revisionare"
         ? "bg-lavender text-lavender-ink"
-        : null;
+        : null; // "Confermato" → nessun chip (lo stato pubblicazione lo mostra il StatusBadge)
 
   return (
     <div className="group relative rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgba(26,24,19,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(26,24,19,0.09)]">

@@ -22,7 +22,6 @@ import {
   updateContentAction,
   deleteContentAction,
   deleteCommentAction,
-  markDeliveredAction,
   confirmContentAction,
   publishContentAction,
 } from "@/app/(app)/contenuti/actions";
@@ -87,9 +86,6 @@ export type ModalComment = {
   videoTimestamp: number | null;
   audioUrl: string | null;
 };
-
-const TABS = ["Panoramica", "Materiali", "Performance"] as const;
-type Tab = (typeof TABS)[number];
 
 function PerfField({
   name,
@@ -339,13 +335,22 @@ export function ContentModal({
   allClasses: SelectableClass[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("Panoramica");
   const [editing, setEditing] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   // Optimistic lifecycle state so the modal updates instantly on action
   // (the intercepting-route slot can be slow to refetch on router.refresh()).
-  const [delivered, setDelivered] = useState(content.deliveredAt != null);
   const [confirmed, setConfirmed] = useState(content.confirmedAt != null);
   const close = () => router.back();
+  const wf = workflowState({
+    confirmedAt: confirmed ? new Date() : null,
+    hasMontato: content.hasMontato,
+  });
+  const isPublished = content.status === "Pubblicato";
+  const WF_TONE: Record<string, string> = {
+    "Da fare": "bg-butter text-butter-ink",
+    "Da revisionare": "bg-lavender text-lavender-ink",
+    Confermato: "bg-sage text-sage-ink",
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
@@ -419,197 +424,117 @@ export function ContentModal({
             </button>
           </div>
 
-          <div className="flex min-h-0 flex-1">
-            <nav className="hidden w-44 shrink-0 border-r border-border p-3 sm:block">
-              {TABS.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  className={`mb-1 block w-full rounded-xl px-3 py-2 text-left text-sm transition-colors ${
-                    tab === t ? "bg-ink text-paper" : "text-muted-foreground hover:bg-secondary"
-                  }`}
-                >
-                  {t}
-                  {t === "Materiali" && comments.length > 0 && (
-                    <span className="ml-1 text-xs opacity-70">({comments.length})</span>
-                  )}
-                </button>
-              ))}
-            </nav>
-
-            <div className="min-w-0 flex-1 overflow-y-auto p-6">
-              {/* mobile tab pills */}
-              <div className="mb-4 flex gap-1.5 overflow-x-auto sm:hidden">
-                {TABS.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTab(t)}
-                    className={`shrink-0 rounded-full px-3 py-1.5 text-xs ${
-                      tab === t ? "bg-ink text-paper" : "bg-secondary text-muted-foreground"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-
-              {tab === "Panoramica" && (
-                <div className="space-y-5">
-                  {!editing ? (
-                    <>
-                      {(() => {
-                        const wf = workflowState({
-                          deliveredAt: delivered ? new Date() : null,
-                          confirmedAt: confirmed ? new Date() : null,
-                          hasMontato: content.hasMontato,
-                        });
-                        const WF_TONE: Record<string, string> = {
-                          "Da consegnare": "bg-secondary text-muted-foreground",
-                          "Da revisionare": "bg-butter text-butter-ink",
-                          "Da confermare": "bg-lavender text-lavender-ink",
-                          Confermato: "bg-sage text-sage-ink",
-                        };
-                        return (
-                          <div className="rounded-2xl border border-border bg-secondary/40 p-4">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <div className="text-xs text-muted-foreground">Stato collaborazione</div>
-                                <span className={`mt-1 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-medium ${WF_TONE[wf]}`}>
-                                  {wf}
-                                </span>
-                              </div>
-                              {confirmed && (
-                                <span className="text-sm font-medium text-sage-ink">✓ Confermato</span>
-                              )}
-                              {content.hasMontato && !confirmed && (
-                                <form
-                                  action={async (fd) => {
-                                    setConfirmed(true);
-                                    await confirmContentAction(fd);
-                                    toast.success("Contenuto confermato");
-                                    router.refresh();
-                                  }}
-                                >
-                                  <input type="hidden" name="contentId" value={content.id} />
-                                  <button className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98]">
-                                    Conferma contenuto
-                                  </button>
-                                </form>
-                              )}
-                            </div>
-                            {!delivered && (
-                              <form
-                                action={async (fd) => {
-                                  setDelivered(true);
-                                  await markDeliveredAction(fd);
-                                  toast.success("Segnato come consegnato");
-                                  router.refresh();
-                                }}
-                                className="mt-3 flex flex-wrap items-center gap-2"
-                              >
-                                <input type="hidden" name="contentId" value={content.id} />
-                                <input
-                                  name="masterLink"
-                                  defaultValue={content.masterLink ?? ""}
-                                  placeholder="Link Drive/iCloud (opz.)"
-                                  className="min-w-0 flex-1 rounded-full border border-border bg-paper px-3.5 py-2 text-sm outline-none focus:border-ink/30"
-                                />
-                                <button className="rounded-full border border-ink/20 bg-paper px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-secondary">
-                                  Materiale consegnato
-                                </button>
-                              </form>
-                            )}
-                            {delivered && !content.hasMontato && (
-                              <p className="mt-2 text-xs text-muted-foreground">
-                                Materiale consegnato — in attesa del montato di Matteo.
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })()}
-                      {confirmed && (content.isAdmin ?? false) && (
-                        <PublishPanel
-                          contentId={content.id}
-                          channel={content.channel}
-                          masterLink={content.masterLink}
-                          initialState={content.publishState ?? null}
-                          initialExternalId={content.externalId ?? null}
-                        />
-                      )}
-                      {content.hook && (
-                        <div>
-                          <div className="text-xs text-muted-foreground">Hook</div>
-                          <p className="mt-1 text-[15px] text-ink">&ldquo;{content.hook}&rdquo;</p>
-                        </div>
-                      )}
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div>
-                          <div className="text-xs text-muted-foreground">Pubblicazione</div>
-                          <p className="mt-1 text-sm text-ink">{fmtDate(content.publishAt)}</p>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground">Tipologia</div>
-                          <p className="mt-1 text-sm text-ink">
-                            {content.format ? (
-                              <span
-                                className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${FORMAT_CHIP[content.format]}`}
-                              >
-                                {FORMAT_LABELS[content.format]}
-                              </span>
-                            ) : (
-                              "—"
-                            )}
-                          </p>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground">Blocco</div>
-                          <p className="mt-1 text-sm text-ink">{content.block?.label ?? "—"}</p>
-                        </div>
-                        <div>
-                          <div className="text-xs text-muted-foreground">Classi</div>
-                          <div className="mt-1 flex flex-wrap gap-1.5">
-                            {content.classes.length > 0 ? (
-                              content.classes.map((cl) => (
-                                <span
-                                  key={cl.id}
-                                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${classChip(cl.color)}`}
-                                >
-                                  {cl.name}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-sm text-ink">—</span>
-                            )}
-                          </div>
-                        </div>
-                        {content.block?.lucaDeliveryAt && (
-                          <div>
-                            <div className="text-xs text-muted-foreground">Consegna Luca</div>
-                            <p className="mt-1 text-sm text-ink">{fmtDate(content.block.lucaDeliveryAt)}</p>
-                          </div>
+          <div className="min-w-0 flex-1 overflow-y-auto">
+            <div className="space-y-6 p-6">
+              <div className="space-y-5">
+                {!editing ? (
+                  <>
+                    {/* Header compatto: stato + azione del momento + metadati essenziali */}
+                    <div className="rounded-2xl border border-border bg-secondary/40 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-medium ${WF_TONE[wf]}`}>
+                          {wf}
+                        </span>
+                        {wf === "Da revisionare" && (
+                          <form
+                            action={async (fd) => {
+                              setConfirmed(true);
+                              await confirmContentAction(fd);
+                              toast.success("Contenuto confermato");
+                              router.refresh();
+                            }}
+                          >
+                            <input type="hidden" name="contentId" value={content.id} />
+                            <button className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98]">
+                              Conferma contenuto
+                            </button>
+                          </form>
                         )}
-                        {content.block?.matteoDeliveryAt && (
-                          <div>
-                            <div className="text-xs text-muted-foreground">Consegna Matteo</div>
-                            <p className="mt-1 text-sm text-ink">{fmtDate(content.block.matteoDeliveryAt)}</p>
-                          </div>
+                        {wf === "Confermato" && (
+                          <span className="text-sm font-medium text-sage-ink">✓ Confermato</span>
                         )}
                       </div>
-                      <div className="flex gap-2 pt-2">
+
+                      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm">
+                        <span className="text-muted-foreground">
+                          Pubblicazione: <span className="text-ink">{fmtDate(content.publishAt)}</span>
+                        </span>
+                        {content.format && (
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${FORMAT_CHIP[content.format]}`}>
+                            {FORMAT_LABELS[content.format]}
+                          </span>
+                        )}
+                        {content.classes.map((cl) => (
+                          <span
+                            key={cl.id}
+                            className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${classChip(cl.color)}`}
+                          >
+                            {cl.name}
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
                         <button
                           onClick={() => setEditing(true)}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-paper px-3.5 py-2 text-sm text-ink transition-colors hover:bg-secondary"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-paper px-3 py-1.5 text-xs text-ink transition-colors hover:bg-secondary"
                         >
-                          <PencilSimple size={15} /> Modifica
+                          <PencilSimple size={14} /> Modifica
                         </button>
                         <form action={deleteContentAction}>
                           <input type="hidden" name="id" value={content.id} />
-                          <button className="inline-flex items-center gap-1.5 rounded-full border border-coral/60 bg-coral/30 px-3.5 py-2 text-sm text-coral-ink transition-colors hover:bg-coral/50">
-                            <Trash size={15} /> Elimina
+                          <button className="inline-flex items-center gap-1.5 rounded-full border border-coral/60 bg-coral/30 px-3 py-1.5 text-xs text-coral-ink transition-colors hover:bg-coral/50">
+                            <Trash size={14} /> Elimina
                           </button>
                         </form>
+                        <button
+                          onClick={() => setDetailsOpen((v) => !v)}
+                          className="ml-auto text-xs text-muted-foreground hover:text-ink"
+                        >
+                          {detailsOpen ? "Nascondi dettagli" : "Dettagli"}
+                        </button>
                       </div>
-                    </>
+
+                      {detailsOpen && (
+                        <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border pt-3 sm:grid-cols-2">
+                          {content.hook && (
+                            <div className="sm:col-span-2">
+                              <div className="text-xs text-muted-foreground">Hook</div>
+                              <p className="mt-0.5 text-[15px] text-ink">&ldquo;{content.hook}&rdquo;</p>
+                            </div>
+                          )}
+                          <div>
+                            <div className="text-xs text-muted-foreground">Blocco</div>
+                            <p className="mt-0.5 text-sm text-ink">{content.block?.label ?? "—"}</p>
+                          </div>
+                          {content.block?.lucaDeliveryAt && (
+                            <div>
+                              <div className="text-xs text-muted-foreground">Consegna Luca</div>
+                              <p className="mt-0.5 text-sm text-ink">{fmtDate(content.block.lucaDeliveryAt)}</p>
+                            </div>
+                          )}
+                          {content.block?.matteoDeliveryAt && (
+                            <div>
+                              <div className="text-xs text-muted-foreground">Consegna Matteo</div>
+                              <p className="mt-0.5 text-sm text-ink">{fmtDate(content.block.matteoDeliveryAt)}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {confirmed && (content.isAdmin ?? false) && (
+                        <div className="mt-3 border-t border-border pt-3">
+                          <PublishPanel
+                            contentId={content.id}
+                            channel={content.channel}
+                            masterLink={content.masterLink}
+                            initialState={content.publishState ?? null}
+                            initialExternalId={content.externalId ?? null}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </>
                   ) : (
                     <form
                       action={async (fd) => {
@@ -682,56 +607,8 @@ export function ContentModal({
                     </form>
                   )}
                 </div>
-              )}
 
-              {tab === "Performance" && (
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-border bg-card p-4">
-                    <div className="text-xs text-muted-foreground">Engagement rate (by reach)</div>
-                    <div className="mt-1 text-2xl font-semibold text-ink">
-                      {content.er != null ? `${content.er}%` : "—"}
-                    </div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">
-                      calcolato dai dati sotto
-                    </div>
-                  </div>
-
-                  <form
-                    action={async (fd) => {
-                      await updatePerformanceAction(fd);
-                      toast.success("Performance salvate");
-                      router.refresh();
-                    }}
-                    className="space-y-3"
-                  >
-                    <input type="hidden" name="id" value={content.id} />
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
-                      <PerfField name="views" label="Views" value={content.views} />
-                      <PerfField name="reach" label="Reach" value={content.reach} />
-                      <PerfField
-                        name="nonFollowerPct"
-                        label="% non-follower"
-                        value={content.nonFollowerPct}
-                        step="any"
-                      />
-                      <PerfField name="likes" label="Like" value={content.likes} />
-                      <PerfField name="commentsCount" label="Commenti" value={content.commentsCount} />
-                      <PerfField name="saves" label="Salvataggi" value={content.saves} />
-                      <PerfField name="shares" label="Condivisioni" value={content.shares} />
-                      <PerfField
-                        name="followsGenerated"
-                        label="Follow generati"
-                        value={content.followsGenerated}
-                      />
-                    </div>
-                    <button className="rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground active:scale-[0.98]">
-                      Salva performance
-                    </button>
-                  </form>
-                </div>
-              )}
-
-              {tab === "Materiali" && materialsMode === "video" && videoMaterial && (
+              {!editing && materialsMode === "video" && videoMaterial && (
                 <VideoReview
                   contentId={content.id}
                   videoUrl={videoMaterial.url}
@@ -741,7 +618,7 @@ export function ContentModal({
                 />
               )}
 
-              {tab === "Materiali" && materialsMode !== "video" && (
+              {!editing && materialsMode !== "video" && (
                 <div className="space-y-6">
                   <MaterialGallery contentId={content.id} images={imageMaterials} />
 
@@ -822,6 +699,53 @@ export function ContentModal({
                     </div>
                   </section>
                 </div>
+              )}
+
+              {!editing && isPublished && (
+                <section className="space-y-4 border-t border-border pt-5">
+                  <h3 className="text-sm font-medium text-muted-foreground">Performance</h3>
+                  <div className="rounded-2xl border border-border bg-card p-4">
+                    <div className="text-xs text-muted-foreground">Engagement rate (by reach)</div>
+                    <div className="mt-1 text-2xl font-semibold text-ink">
+                      {content.er != null ? `${content.er}%` : "—"}
+                    </div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      calcolato dai dati sotto
+                    </div>
+                  </div>
+                  <form
+                    action={async (fd) => {
+                      await updatePerformanceAction(fd);
+                      toast.success("Performance salvate");
+                      router.refresh();
+                    }}
+                    className="space-y-3"
+                  >
+                    <input type="hidden" name="id" value={content.id} />
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
+                      <PerfField name="views" label="Views" value={content.views} />
+                      <PerfField name="reach" label="Reach" value={content.reach} />
+                      <PerfField
+                        name="nonFollowerPct"
+                        label="% non-follower"
+                        value={content.nonFollowerPct}
+                        step="any"
+                      />
+                      <PerfField name="likes" label="Like" value={content.likes} />
+                      <PerfField name="commentsCount" label="Commenti" value={content.commentsCount} />
+                      <PerfField name="saves" label="Salvataggi" value={content.saves} />
+                      <PerfField name="shares" label="Condivisioni" value={content.shares} />
+                      <PerfField
+                        name="followsGenerated"
+                        label="Follow generati"
+                        value={content.followsGenerated}
+                      />
+                    </div>
+                    <button className="rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground active:scale-[0.98]">
+                      Salva performance
+                    </button>
+                  </form>
+                </section>
               )}
             </div>
           </div>
