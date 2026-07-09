@@ -233,6 +233,9 @@ export async function publishContentAction(
       externalId: result.externalId,
       publishState: scheduledAt ? "scheduled" : "published",
       publishError: null,
+      // Workflow: una pubblicazione immediata sposta il contenuto a "Pubblicato"
+      // (override esplicito e reversibile). I programmati seguono `publishAt`.
+      ...(scheduledAt ? {} : { statusOverride: "Pubblicato" }),
     },
   });
 

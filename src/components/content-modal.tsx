@@ -154,6 +154,8 @@ function PublishPanel({
   const [busy, setBusy] = useState(false);
   const [state, setState] = useState<string | null>(initialState);
   const [externalId, setExternalId] = useState<string | null>(initialExternalId);
+  const [confirmWord, setConfirmWord] = useState("");
+  const canPublish = confirmWord.trim().toUpperCase() === "PUBBLICA";
 
   const toggle = (id: string) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -299,10 +301,22 @@ function PublishPanel({
             confermare.
           </div>
 
+          <div>
+            <div className="mb-1 text-xs font-medium text-muted-foreground">
+              Conferma: scrivi <span className="font-mono text-ink">PUBBLICA</span> per abilitare
+            </div>
+            <input
+              value={confirmWord}
+              onChange={(e) => setConfirmWord(e.target.value)}
+              placeholder="PUBBLICA"
+              className="w-full rounded-full border border-border bg-paper px-3.5 py-2 text-sm outline-none focus:border-ink/30"
+            />
+          </div>
+
           <div className="flex gap-2">
             <button
               onClick={onPublish}
-              disabled={busy}
+              disabled={busy || !canPublish}
               className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-60"
             >
               <RocketLaunch size={15} weight="fill" />

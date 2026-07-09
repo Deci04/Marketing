@@ -774,6 +774,20 @@ export async function publish(params: PublishParams): Promise<PublishResult> {
       )} — pubblico l'originale a piena qualità (${mediaUrl})`
     );
 
+    // SAFETY (filone W): dry-run attivo di DEFAULT. Il post reale parte SOLO con
+    // ZERNIO_PUBLISH_DRY_RUN="false" esplicito in env. Così si collauda l'intero
+    // flusso (claim atomico, stato → Pubblicato, UI) senza mai inviare un post
+    // reale sull'account collegato. L'externalId fittizio `dryrun-*` è distinguibile
+    // e non aggancia falsi KPI.
+    if (process.env.ZERNIO_PUBLISH_DRY_RUN !== "false") {
+      console.warn(
+        `[zernio.publish][DRY-RUN] NON invio a Zernio. content=${contentId} platforms=${platforms.join(
+          ","
+        )} media=${mediaUrl}`
+      );
+      return { externalId: `dryrun-${contentId}-${Date.now()}` };
+    }
+
     const res = await zernioFetch<ZernioPublishResponse>("/publish", {
       method: "POST",
       body: JSON.stringify({

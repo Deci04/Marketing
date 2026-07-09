@@ -25,6 +25,10 @@ import { currentContext } from "@/lib/current";
 import { del } from "@vercel/blob";
 import { publishContentAction } from "@/app/(app)/contenuti/actions";
 
+// Queste suite testano il PATH LIVE con la rete mockata: disattiviamo il
+// dry-run di sicurezza (attivo di default in produzione) per esercitarlo.
+process.env.ZERNIO_PUBLISH_DRY_RUN = "false";
+
 const ws = { id: `ws_test_publish_${Date.now()}`, name: "w-publish-test" };
 const ADMIN = { id: "u_admin", isAdmin: true };
 const PROXY = "https://blob.example/proxy-compresso.mp4";
@@ -211,3 +215,21 @@ function mkFd(contentId: string) {
   fd.append("platforms", "INSTAGRAM");
   return fd;
 }
+
+describe("safety: dry-run di default (nessun post reale)", () => {
+  it("senza ZERNIO_PUBLISH_DRY_RUN='false' non invia a Zernio e ritorna un externalId dryrun-*", async () => {
+    const prev = process.env.ZERNIO_PUBLISH_DRY_RUN;
+    delete process.env.ZERNIO_PUBLISH_DRY_RUN; // default sicuro
+    try {
+      const res = await publish({
+        workspaceId: "ws_dryrun",
+        contentId: "c_dryrun_nonexistent",
+        platforms: ["INSTAGRAM"],
+        mediaUrl: MASTER,
+      });
+      expect("externalId" in res && res.externalId).toMatch(/^dryrun-/);
+    } finally {
+      process.env.ZERNIO_PUBLISH_DRY_RUN = prev;
+    }
+  });
+});
