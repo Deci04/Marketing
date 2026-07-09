@@ -30,14 +30,14 @@ export default async function HomePage() {
     .sort((a, b) => a.publishAt!.getTime() - b.publishAt!.getTime());
   const next = upcoming[0] ?? null;
 
-  // "Da fare adesso": azioni imperative per ruolo (admin = Matteo revisiona,
-  // collaborator = Luca consegna/conferma), ordinate per urgenza, rumore zero.
+  // "Da fare adesso": azioni imperative per ruolo (admin = Matteo monta i
+  // "Da fare", collaborator = Luca consegna la settimana / revisiona i montati),
+  // ordinate per urgenza, rumore zero.
   const role: "luca" | "matteo" = ctx.user.isAdmin ? "matteo" : "luca";
   const homeContents: HomeContent[] = contents.map((c) => ({
     id: c.id,
     title: c.title,
     format: c.format,
-    deliveredAt: c.deliveredAt,
     confirmedAt: c.confirmedAt,
     hasMontato: c.videoProxyUrl != null || c._count.materials > 0,
     block: c.block ? { lucaDeliveryAt: c.block.lucaDeliveryAt } : null,
