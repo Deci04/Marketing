@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, PencilSimple, Trash, Check, X } from "@phosphor-icons/react";
-import { CLASS_COLORS, classChip } from "@/lib/classes";
+import { CLASS_COLORS, classChip } from "@/lib/class-format";
 import {
   createClassAction,
   renameClassAction,

@@ -11,7 +11,7 @@ import {
 } from "@phosphor-icons/react";
 import type { ContentFormat } from "@prisma/client";
 import { FORMAT_CHIP, FORMAT_LABELS } from "@/lib/format";
-import { classChip } from "@/lib/classes";
+import { classChip } from "@/lib/class-format";
 
 export type ArchiveRow = {
   id: string;

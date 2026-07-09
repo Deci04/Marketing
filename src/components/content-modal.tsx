@@ -32,7 +32,7 @@ import { isDerivedStatus, type DerivedStatus } from "@/lib/status";
 import { StatusBadge } from "@/components/status-badge";
 import { updatePerformanceAction } from "@/app/(app)/kpi/actions";
 import { FORMAT_ORDER, FORMAT_LABELS, FORMAT_CHIP } from "@/lib/format";
-import { classChip } from "@/lib/classes";
+import { classChip } from "@/lib/class-format";
 import { galleryMode, sortByOrder } from "@/lib/materials";
 import { ClassSelect, type SelectableClass } from "@/components/class-select";
 import { VideoReview, type ReviewComment } from "@/components/video-review";

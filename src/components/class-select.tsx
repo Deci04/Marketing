@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { classChip } from "@/lib/classes";
+import { classChip } from "@/lib/class-format";
 
 export type SelectableClass = { id: string; name: string; color: string | null };
 
