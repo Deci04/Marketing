@@ -251,7 +251,7 @@ export function contentsForStato<T extends ArchivableContent>(
 type RowSource = ArchivableContent & {
   id: string;
   title: string;
-  channel: "INSTAGRAM" | "YOUTUBE";
+  channel: import("@prisma/client").Channel;
   format?: ContentFormat | null;
   classes: { id: string; name: string; color: string | null }[];
   publishAt?: Date | null;
@@ -283,7 +283,7 @@ export function toArchiveRows(contents: RowSource[]): ArchiveRowData[] {
     return {
       id: c.id,
       title: c.title,
-      channel: c.channel,
+      channel: c.channel as "INSTAGRAM" | "YOUTUBE",
       format: c.format ?? null,
       classes: c.classes.map((cl) => ({ id: cl.id, name: cl.name, color: cl.color })),
       status: effectiveStatus(c.statusOverride ?? null, {

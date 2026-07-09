@@ -6,7 +6,11 @@ import {
   listBlocks,
   splitActiveArchived,
   matchesSearch,
+  parseStato,
+  contentsForStato,
+  toArchiveRows,
 } from "@/lib/content";
+import { ArchiveTable } from "@/components/archive-table";
 import { listClasses } from "@/lib/classes";
 import { FORMAT_ORDER, FORMAT_LABELS } from "@/lib/format";
 import { parseFormat } from "@/lib/format";
@@ -77,6 +81,7 @@ export default async function ContenutiPage({
   const classIds = toArray(sp.class);
   const query = typeof sp.q === "string" ? sp.q : "";
   const includeArchived = sp.archivio === "1";
+  const stato = parseStato(sp.stato);
   const hasFilters = formats.length > 0 || classIds.length > 0;
   const isSearching = query.trim().length > 0;
 
@@ -124,6 +129,20 @@ export default async function ContenutiPage({
   const groups = [...groupMap.values()].sort((a, b) => a.sort - b.sort);
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+  const segHref = (s: string) => {
+    const p = new URLSearchParams();
+    if (s !== "lavorazione") p.set("stato", s);
+    for (const f of toArray(sp.format)) p.append("format", f);
+    for (const c of toArray(sp.class)) p.append("class", c);
+    const qs = p.toString();
+    return qs ? `/contenuti?${qs}` : "/contenuti";
+  };
+  const SEG: { key: string; label: string }[] = [
+    { key: "lavorazione", label: "In lavorazione" },
+    { key: "pubblicati", label: "Pubblicati" },
+    { key: "tutti", label: "Tutti" },
+  ];
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -132,6 +151,20 @@ export default async function ContenutiPage({
           <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
         </div>
       </header>
+
+      <div className="inline-flex rounded-full border border-border bg-secondary/50 p-1 text-sm">
+        {SEG.map((s) => (
+          <Link
+            key={s.key}
+            href={segHref(s.key)}
+            className={`rounded-full px-3.5 py-1.5 transition-colors ${
+              stato === s.key ? "bg-ink text-paper" : "text-muted-foreground hover:text-ink"
+            }`}
+          >
+            {s.label}
+          </Link>
+        ))}
+      </div>
 
       <details className="group">
         <summary className={summaryClass}>
@@ -228,7 +261,7 @@ export default async function ContenutiPage({
           icon={<PaperPlaneTilt size={20} weight="fill" />}
         />
         <Link
-          href="/archivio"
+          href="/contenuti?stato=pubblicati"
           className="rounded-2xl transition-transform active:scale-[0.98]"
         >
           <Stat
@@ -240,12 +273,17 @@ export default async function ContenutiPage({
         </Link>
       </div>
 
+      {stato !== "lavorazione" ? (
+        <section className="space-y-3">
+          <ArchiveTable rows={toArchiveRows(contentsForStato(contents, stato, now))} />
+        </section>
+      ) : (
       <section className="space-y-3">
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-lg">Contenuti attivi</h2>
           {archived.length > 0 && (
             <Link
-              href="/archivio"
+              href="/contenuti?stato=pubblicati"
               className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-ink"
             >
               Archivio ({archived.length})
@@ -295,6 +333,7 @@ export default async function ContenutiPage({
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

@@ -1,51 +1,7 @@
-import { currentContext } from "@/lib/current";
-import {
-  listContents,
-  engagementRate,
-  splitActiveArchived,
-} from "@/lib/content";
-import { effectiveStatus } from "@/lib/status";
-import { ArchiveTable, type ArchiveRow } from "@/components/archive-table";
+import { redirect } from "next/navigation";
 
-export default async function ArchivioPage() {
-  const ctx = await currentContext();
-  if (!ctx) return null;
-  const contents = await listContents(ctx.workspaceId);
-  // Archive = contents "Pubblicato" da >14 giorni (spec S). The rest stays in /contenuti.
-  const { archived } = splitActiveArchived(contents, new Date());
-
-  const rows: ArchiveRow[] = archived.map((c) => {
-    const er = engagementRate(c);
-    return {
-      id: c.id,
-      title: c.title,
-      channel: c.channel as "INSTAGRAM" | "YOUTUBE",
-      format: c.format ?? null,
-      classes: c.classes.map((cl) => ({
-        id: cl.id,
-        name: cl.name,
-        color: cl.color,
-      })),
-      status: effectiveStatus(c.statusOverride, {
-        publishAt: c.publishAt,
-        lucaDeliveryAt: c.block?.lucaDeliveryAt ?? null,
-        matteoDeliveryAt: c.block?.matteoDeliveryAt ?? null,
-      }),
-      publishAt: c.publishAt ? c.publishAt.toISOString() : null,
-      views: c.views ?? null,
-      er: er != null ? Math.round(er * 1000) / 10 : null,
-    };
-  });
-
-  return (
-    <div className="mx-auto max-w-5xl space-y-5">
-      <header>
-        <h1 className="text-3xl">Archivio</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {rows.length} {rows.length === 1 ? "contenuto pubblicato" : "contenuti pubblicati"} da oltre 14 giorni · ordina cliccando le colonne
-        </p>
-      </header>
-      <ArchiveTable rows={rows} />
-    </div>
-  );
+// Archivio è stato fuso in Contenuti (filtro "Pubblicati"). Manteniamo la rotta
+// come redirect per eventuali link salvati.
+export default function ArchivioRedirect() {
+  redirect("/contenuti?stato=pubblicati");
 }
