@@ -14,6 +14,8 @@
     "@ai-sdk/anthropic": "^3.0.85",
     "@ai-sdk/react": "^3.0.210",
     "@auth/prisma-adapter": "^2.11.2",
+    "@aws-sdk/client-s3": "^3.1084.0",
+    "@aws-sdk/s3-request-presigner": "^3.1084.0",
     "@base-ui/react": "^1.6.0",
     "@phosphor-icons/react": "^2.1.10",
     "@prisma/client": "^6.19.3",
