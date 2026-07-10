@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import {
   UploadSimple,
   PaperPlaneTilt,
-  Spinner,
   Paperclip,
   X,
   Microphone,
@@ -41,8 +40,36 @@ function mmss(s: number): string {
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/** PUT su R2 con progresso reale (fetch non espone l'upload progress → XHR). */
+function putWithProgress(
+  url: string,
+  file: File,
+  contentType: string,
+  onProgress: (pct: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", contentType);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`R2 ha rifiutato l'upload (HTTP ${xhr.status}).`));
+    xhr.onerror = () =>
+      reject(
+        new Error(
+          "Upload bloccato dal browser (CORS/origine). Apri l'app da http://localhost:3000 o dall'IP autorizzato."
+        )
+      );
+    xhr.send(file);
+  });
+}
+
 /** Carica un file su R2 (presigned PUT) e ritorna i riferimenti per la DiaryEntry. */
-async function uploadToR2(file: File) {
+async function uploadToR2(file: File, onProgress?: (pct: number) => void) {
   const contentType = file.type || "application/octet-stream";
   const res = await fetch("/api/diario/upload-url", {
     method: "POST",
@@ -54,14 +81,31 @@ async function uploadToR2(file: File) {
     throw new Error(j.error ?? "Errore nel richiedere l'URL di upload");
   }
   const { uploadUrl, r2Key } = await res.json();
-  let put: Response;
-  try {
-    put = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
-  } catch {
-    throw new Error("Upload bloccato dal browser (CORS/origine). Apri l'app da http://localhost:3000 o dall'IP autorizzato.");
-  }
-  if (!put.ok) throw new Error(`R2 ha rifiutato l'upload (HTTP ${put.status}).`);
+  await putWithProgress(uploadUrl, file, contentType, onProgress ?? (() => {}));
   return { r2Key: r2Key as string, mediaType: mediaTypeOf(contentType), mediaSize: file.size };
+}
+
+/** Anello di progresso stile WhatsApp (SVG). */
+function Ring({ pct }: { pct: number }) {
+  const r = 9;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" className="shrink-0">
+      <circle cx="11" cy="11" r={r} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.25" />
+      <circle
+        cx="11"
+        cy="11"
+        r={r}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray={c}
+        strokeDashoffset={c * (1 - Math.max(0, Math.min(100, pct)) / 100)}
+        transform="rotate(-90 11 11)"
+      />
+    </svg>
+  );
 }
 
 /**
@@ -73,7 +117,7 @@ export function DiaryUpload() {
   const [files, setFiles] = useState<File[]>([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const [prog, setProg] = useState<string | null>(null);
+  const [prog, setProg] = useState<{ i: number; total: number; pct: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // registratore vocale
@@ -141,7 +185,7 @@ export function DiaryUpload() {
   async function sendVoice(voice: File) {
     setBusy(true);
     try {
-      const up = await uploadToR2(voice);
+      const up = await uploadToR2(voice, (pct) => setProg({ i: 1, total: 1, pct }));
       const save = await saveDiaryUploadAction(up);
       if (!save.ok) throw new Error(save.error ?? "Salvataggio fallito");
       toast.success("Vocale inviato");
@@ -150,6 +194,7 @@ export function DiaryUpload() {
       toast.error(e instanceof Error ? e.message : "Errore");
     } finally {
       setBusy(false);
+      setProg(null);
     }
   }
 
@@ -164,8 +209,9 @@ export function DiaryUpload() {
         if (!save.ok) throw new Error(save.error ?? "Salvataggio fallito");
       }
       for (let i = 0; i < files.length; i++) {
-        setProg(`${i + 1}/${files.length}`);
-        const up = await uploadToR2(files[i]);
+        const up = await uploadToR2(files[i], (pct) =>
+          setProg({ i: i + 1, total: files.length, pct })
+        );
         const save = await saveDiaryUploadAction(up);
         if (!save.ok) throw new Error(save.error ?? "Salvataggio fallito");
       }
@@ -260,8 +306,8 @@ export function DiaryUpload() {
           disabled={busy}
           className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
         >
-          {busy ? <Spinner size={15} className="animate-spin" /> : <PaperPlaneTilt size={15} weight="fill" />}
-          {busy ? (prog ? `Carico ${prog}…` : "Carico…") : "Aggiungi"}
+          {busy ? <Ring pct={prog?.pct ?? 0} /> : <PaperPlaneTilt size={15} weight="fill" />}
+          {busy ? (prog ? `${prog.i}/${prog.total} · ${prog.pct}%` : "Carico…") : "Aggiungi"}
         </button>
       </div>
     </div>
