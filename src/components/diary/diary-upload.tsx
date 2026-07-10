@@ -48,15 +48,22 @@ export function DiaryUpload() {
         }
         const { uploadUrl, r2Key: key } = await res.json();
         // PUT diretto su R2 — il Content-Type deve combaciare con quello firmato.
-        const put = await fetch(uploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": contentType },
-          body: file,
-        });
-        if (!put.ok)
+        let put: Response;
+        try {
+          put = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: { "Content-Type": contentType },
+            body: file,
+          });
+        } catch {
+          // fetch che rigetta = tipicamente preflight CORS bloccato dal browser
+          // (origine non autorizzata sul bucket): messaggio esplicito, non "Failed to fetch".
           throw new Error(
-            "Upload su R2 fallito — controlla la CORS del bucket."
+            "Upload bloccato dal browser (CORS/origine). Apri l'app da http://localhost:3000 o dall'IP autorizzato."
           );
+        }
+        if (!put.ok)
+          throw new Error(`R2 ha rifiutato l'upload (HTTP ${put.status}).`);
         r2Key = key;
         mediaType = mediaTypeOf(contentType);
         mediaSize = file.size;

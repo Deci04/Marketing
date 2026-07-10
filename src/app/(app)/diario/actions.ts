@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { currentContext } from "@/lib/current";
 import { createDiaryEntry } from "@/lib/diary";
+import { db } from "@/lib/db";
+import { scopedWhere } from "@/lib/workspace";
+import { deleteObject, isConfigured } from "@/lib/r2";
 
 /**
  * C1 — crea una DiaryEntry dopo che il client ha caricato il file su R2
@@ -31,6 +34,31 @@ export async function saveDiaryUploadAction(input: {
     mediaType: input.mediaType ?? (hasText ? "text" : null),
     mediaSize: input.mediaSize ?? null,
   });
+
+  revalidatePath("/diario");
+  return { ok: true };
+}
+
+/**
+ * Elimina un messaggio della raccolta: cancella l'oggetto R2 associato (se c'è)
+ * e la DiaryEntry. Consentito solo all'autore del messaggio o a un admin.
+ */
+export async function deleteDiaryEntryAction(
+  id: string
+): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await currentContext();
+  if (!ctx) return { ok: false, error: "Non autorizzato" };
+
+  const entry = await db.diaryEntry.findFirst({
+    where: scopedWhere(ctx.workspaceId, { id }),
+  });
+  if (!entry) return { ok: false, error: "Messaggio non trovato" };
+  if (entry.authorUserId !== ctx.user.id && !ctx.user.isAdmin)
+    return { ok: false, error: "Non puoi eliminare questo messaggio" };
+
+  if (entry.r2Key && isConfigured())
+    await deleteObject(entry.r2Key).catch(() => {});
+  await db.diaryEntry.delete({ where: { id: entry.id } });
 
   revalidatePath("/diario");
   return { ok: true };
