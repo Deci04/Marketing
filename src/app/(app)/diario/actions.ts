@@ -5,7 +5,8 @@ import { currentContext } from "@/lib/current";
 import { createDiaryEntry, searchDiaryEntries } from "@/lib/diary";
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
-import { deleteObject, isConfigured } from "@/lib/r2";
+import { deleteObject, isConfigured, getObjectBytes } from "@/lib/r2";
+import { transcribeAudio, hasGroqKey } from "@/lib/diary-transcribe";
 import {
   organizeDiary,
   type OrganizeEntry,
@@ -30,6 +31,22 @@ export async function saveDiaryUploadAction(input: {
   if (!input.r2Key && !hasText)
     return { ok: false, error: "Niente da salvare" };
 
+  // Audio → transcript (C2b, Groq Whisper). Best-effort: se manca la chiave o
+  // fallisce, l'audio si salva comunque senza transcript.
+  let aiDescription: string | null = null;
+  if (
+    input.r2Key &&
+    input.mediaType === "audio" &&
+    isConfigured() &&
+    hasGroqKey()
+  ) {
+    try {
+      aiDescription = await transcribeAudio(await getObjectBytes(input.r2Key));
+    } catch {
+      // ignora: transcript best-effort
+    }
+  }
+
   const mediaUrl = input.r2Key ? `/api/diario/media/${input.r2Key}` : null;
   await createDiaryEntry(ctx.workspaceId, {
     authorUserId: ctx.user.id,
@@ -38,6 +55,7 @@ export async function saveDiaryUploadAction(input: {
     mediaUrl,
     mediaType: input.mediaType ?? (hasText ? "text" : null),
     mediaSize: input.mediaSize ?? null,
+    aiDescription,
   });
 
   revalidatePath("/diario");

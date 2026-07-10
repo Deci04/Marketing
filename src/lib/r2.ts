@@ -74,3 +74,13 @@ export function presignGet(key: string, expiresSec = 3600) {
 export async function deleteObject(key: string): Promise<void> {
   await client().send(new DeleteObjectCommand({ Bucket: bucket(), Key: key }));
 }
+
+/** Scarica l'oggetto come byte (server-side), es. per la trascrizione audio. */
+export async function getObjectBytes(key: string): Promise<Uint8Array> {
+  const obj = await client().send(
+    new GetObjectCommand({ Bucket: bucket(), Key: key })
+  );
+  return (obj.Body as {
+    transformToByteArray: () => Promise<Uint8Array>;
+  }).transformToByteArray();
+}

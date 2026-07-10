@@ -30,6 +30,8 @@ export function DiaryOrganize({ entries }: { entries: ConvEntry[] }) {
   const [schede, setSchede] = useState<Scheda[] | null>(null);
   const byId = new Map(entries.map((e) => [e.id, e]));
 
+  const [zipping, setZipping] = useState<number | null>(null);
+
   async function run() {
     setBusy(true);
     try {
@@ -43,6 +45,33 @@ export function DiaryOrganize({ entries }: { entries: ConvEntry[] }) {
       else toast.success(`${res.schede.length} contenuti individuati`);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function downloadZip(idx: number, entryIds: string[]) {
+    if (zipping !== null) return;
+    setZipping(idx);
+    try {
+      const res = await fetch("/api/diario/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entryIds }),
+      });
+      if (!res.ok) {
+        toast.error("Download fallito");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "raccolta.zip";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Download fallito");
+    } finally {
+      setZipping(null);
     }
   }
 
@@ -67,7 +96,23 @@ export function DiaryOrganize({ entries }: { entries: ConvEntry[] }) {
 
       {schede?.map((s, i) => (
         <div key={i} className="rounded-2xl border border-border bg-paper p-3.5">
-          <h3 className="font-heading text-lg text-ink">{s.titolo}</h3>
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="font-heading text-lg text-ink">{s.titolo}</h3>
+            {s.media.some((m) => byId.get(m.entryId)?.mediaUrl) && (
+              <button
+                onClick={() => downloadZip(i, s.media.map((m) => m.entryId))}
+                disabled={zipping === i}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-secondary px-3 py-1.5 text-xs text-ink transition-colors hover:bg-secondary/70 disabled:opacity-60"
+              >
+                {zipping === i ? (
+                  <Spinner size={12} className="animate-spin" />
+                ) : (
+                  <DownloadSimple size={12} />
+                )}
+                {zipping === i ? "Preparo…" : "Scarica zip"}
+              </button>
+            )}
+          </div>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Brief label="Contesto" value={s.contesto} />
             <Brief label="Intento" value={s.intento} />
