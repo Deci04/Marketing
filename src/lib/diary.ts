@@ -7,9 +7,14 @@ export type DiaryEntryInput = {
   rawText?: string | null;
   caption?: string | null;
   telegramFileId?: string | null;
-  telegramFileType?: string | null; // "photo" | "video" | "document"
+  telegramFileType?: string | null; // "photo" | "video" | "document" (legacy Telegram)
   aiTitle?: string | null;
   aiDescription?: string | null;
+  // C1 — media su Cloudflare R2 (nuovo canale di ingestion in-app).
+  r2Key?: string | null;
+  mediaUrl?: string | null;
+  mediaType?: string | null; // "image" | "video" | "audio" | "text"
+  mediaSize?: number | null;
 };
 
 export async function createDiaryEntry(
@@ -26,6 +31,10 @@ export async function createDiaryEntry(
       telegramFileType: data.telegramFileType ?? null,
       aiTitle: data.aiTitle ?? null,
       aiDescription: data.aiDescription ?? null,
+      r2Key: data.r2Key ?? null,
+      mediaUrl: data.mediaUrl ?? null,
+      mediaType: data.mediaType ?? null,
+      mediaSize: data.mediaSize ?? null,
     },
   });
 }

@@ -442,6 +442,13 @@ model DiaryEntry {
   telegramFileType String? // "photo" | "video" | "document"
   aiTitle          String?
   aiDescription    String? // per le foto: descrizione via vision
+  // Filone C1 — storage su Cloudflare R2 (sostituisce lo storage Telegram).
+  r2Key            String? // chiave oggetto R2, es. "raw/{ws}/{id}/{file}"
+  mediaUrl         String? // URL di lettura del media (via route proxy)
+  mediaType        String? // "image" | "video" | "audio" | "text"
+  mediaSize        Int?
+  archivedAt       DateTime? // valorizzato quando spostato su Drive (C3)
+  driveFileId      String? // id file su Google Drive dopo l'archiviazione (C3)
   createdAt        DateTime @default(now())
   workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 

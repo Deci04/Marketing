@@ -26,6 +26,21 @@ describe("diary data layer", () => {
     expect(reel.length).toBe(1);
   });
 
+  it("persiste i campi media R2 (nuovo canale in-app)", async () => {
+    const entry = await createDiaryEntry(ws.id, {
+      rawText: "nota con foto",
+      r2Key: "raw/ws/eid/foto.png",
+      mediaUrl: "/api/diario/media/raw/ws/eid/foto.png",
+      mediaType: "image",
+      mediaSize: 12345,
+    });
+    expect(entry.r2Key).toBe("raw/ws/eid/foto.png");
+    expect(entry.mediaType).toBe("image");
+    expect(entry.mediaSize).toBe(12345);
+    const back = await db.diaryEntry.findUnique({ where: { id: entry.id } });
+    expect(back?.mediaUrl).toBe("/api/diario/media/raw/ws/eid/foto.png");
+  });
+
   afterAll(async () => {
     await db.diaryEntry.deleteMany({ where: { workspaceId: ws.id } }).catch(() => {});
     await db.workspace.delete({ where: { id: ws.id } }).catch(() => {});
