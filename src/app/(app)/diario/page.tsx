@@ -7,6 +7,7 @@ import {
   DiaryConversation,
   type ConvEntry,
 } from "@/components/diary/diary-conversation";
+import { DiaryOrganize } from "@/components/diary/diary-organize";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,10 @@ export default async function DiarioPage() {
       />
 
       <DiaryUpload />
+
+      {(ctx.user.isAdmin ?? false) && entries.length > 0 && (
+        <DiaryOrganize entries={entries} />
+      )}
 
       <details className="group rounded-2xl border border-border bg-card">
         <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-ink [&::-webkit-details-marker]:hidden">
