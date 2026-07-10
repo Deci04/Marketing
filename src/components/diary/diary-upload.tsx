@@ -310,6 +310,16 @@ export function DiaryUpload() {
           {busy ? (prog ? `${prog.i}/${prog.total} · ${prog.pct}%` : "Carico…") : "Aggiungi"}
         </button>
       </div>
+
+      {files.length > 0 ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {files.length} pronti · tocca “Aggiungi altri” per accodarne altri, poi “Aggiungi”.
+        </p>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Puoi aggiungerne più d’uno: selezionane tanti insieme, oppure uno alla volta con “Aggiungi altri”.
+        </p>
+      )}
     </div>
   );
 }
