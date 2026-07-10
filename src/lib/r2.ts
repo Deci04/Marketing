@@ -38,9 +38,12 @@ export function client(): S3Client {
   if (_client) return _client;
   _client = new S3Client({
     region: "auto",
-    endpoint: `https://${acc()}.r2.cloudflarestorage.com`,
-    // R2 espone l'endpoint account-level e usa il path-style (bucket nel path):
-    // il virtual-hosted default dell'SDK (bucket come sottodominio) NON risolve su R2.
+    // Endpoint configurabile: i bucket con giurisdizione (es. EU) usano
+    // `https://<accountid>.eu.r2.cloudflarestorage.com`. `R2_ENDPOINT` (URL intero)
+    // ha la precedenza; altrimenti si usa l'endpoint account-level di default.
+    endpoint: process.env.R2_ENDPOINT || `https://${acc()}.r2.cloudflarestorage.com`,
+    // R2 usa il path-style (bucket nel path): il virtual-hosted default dell'SDK
+    // (bucket come sottodominio) NON risolve su R2.
     forcePathStyle: true,
     credentials: {
       accessKeyId: process.env.R2_ACCESS_KEY_ID ?? "",
