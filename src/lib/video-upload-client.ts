@@ -3,8 +3,10 @@
 import { uploadViaServer } from "@/lib/blob-upload";
 import { compressToProxy, isCompressionSupported } from "@/lib/video-compress";
 
-/** Se il browser non sa comprimere, carica l'originale con un tetto. */
-const FALLBACK_MAX_BYTES = 50 * 1024 * 1024;
+/** Se il browser non sa comprimere (es. Safari), carica l'originale con un tetto.
+ *  L'upload è client→Blob multipart, quindi regge file grandi in modo affidabile. */
+const FALLBACK_MAX_MB = 1024; // 1 GB
+const FALLBACK_MAX_BYTES = FALLBACK_MAX_MB * 1024 * 1024;
 
 export class VideoTooLargeError extends Error {}
 
@@ -42,7 +44,7 @@ export async function compressAndUploadVideoProxy(
 
   if (!compressed && file.size > FALLBACK_MAX_BYTES) {
     throw new VideoTooLargeError(
-      "Compressione non disponibile e file troppo grande (max 50MB). Carica una clip più leggera o usa il link al master esterno."
+      `Compressione non disponibile e file troppo grande (max ${FALLBACK_MAX_MB >= 1024 ? `${FALLBACK_MAX_MB / 1024}GB` : `${FALLBACK_MAX_MB}MB`}). Carica una clip più leggera o usa il link al master esterno.`
     );
   }
 

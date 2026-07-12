@@ -24,6 +24,8 @@ export async function uploadViaServer(
     access: "public",
     handleUploadUrl: "/api/video-upload",
     contentType: baseType,
+    // Multipart: upload affidabile per file grandi (parti con retry), fino a 5TB.
+    multipart: true,
   });
   return { url: blob.url };
 }
