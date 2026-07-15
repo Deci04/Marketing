@@ -15,6 +15,9 @@ export type DiaryEntryInput = {
   mediaUrl?: string | null;
   mediaType?: string | null; // "image" | "video" | "audio" | "text"
   mediaSize?: number | null;
+  // C3 — archiviazione del raw su Google Drive (storage-originali-drive-lifecycle).
+  driveFileId?: string | null;
+  archivedAt?: Date | null;
 };
 
 export async function createDiaryEntry(
@@ -35,6 +38,8 @@ export async function createDiaryEntry(
       mediaUrl: data.mediaUrl ?? null,
       mediaType: data.mediaType ?? null,
       mediaSize: data.mediaSize ?? null,
+      driveFileId: data.driveFileId ?? null,
+      archivedAt: data.archivedAt ?? null,
     },
   });
 }

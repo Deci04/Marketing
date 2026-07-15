@@ -12,6 +12,8 @@ import {
   type OrganizeEntry,
   type OrganizeResult,
 } from "@/lib/diary-organize";
+import { archiveR2KeyToDrive } from "@/lib/drive-archive";
+import { ensureDriveFolders } from "@/lib/drive-folders";
 
 /**
  * C1 — crea una DiaryEntry dopo che il client ha caricato il file su R2
@@ -48,7 +50,7 @@ export async function saveDiaryUploadAction(input: {
   }
 
   const mediaUrl = input.r2Key ? `/api/diario/media/${input.r2Key}` : null;
-  await createDiaryEntry(ctx.workspaceId, {
+  const entry = await createDiaryEntry(ctx.workspaceId, {
     authorUserId: ctx.user.id,
     rawText: input.rawText?.trim() || null,
     r2Key: input.r2Key ?? null,
@@ -57,6 +59,33 @@ export async function saveDiaryUploadAction(input: {
     mediaSize: input.mediaSize ?? null,
     aiDescription,
   });
+
+  // Archivia subito il raw su Drive (R2→Drive), così esiste prima che la lifecycle
+  // possa cancellarlo da R2. Best-effort: se Drive è off o fallisce, resta solo su R2.
+  if (input.r2Key) {
+    try {
+      const folders = await ensureDriveFolders();
+      const name = input.r2Key.split("/").pop() || "raw";
+      const driveFileId = await archiveR2KeyToDrive({
+        r2Key: input.r2Key,
+        name,
+        mimeType:
+          input.mediaType === "video" ? "video/mp4"
+          : input.mediaType === "audio" ? "audio/mpeg"
+          : input.mediaType === "image" ? "image/jpeg"
+          : "application/octet-stream",
+        folderId: folders?.rawMainFolderId, // pre-C2: default main; C2 sposterà in broll se serve
+      });
+      if (driveFileId) {
+        await db.diaryEntry.update({
+          where: { id: entry.id },
+          data: { driveFileId, archivedAt: new Date() },
+        });
+      }
+    } catch {
+      // best-effort: l'archiviazione non blocca il salvataggio del messaggio
+    }
+  }
 
   revalidatePath("/diario");
   return { ok: true };
