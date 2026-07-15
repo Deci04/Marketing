@@ -1,5 +1,10 @@
 # Spec C3 — Diario: lifecycle R2 + archivio Google Drive
 
+> ⚠️ SUPERATA il 2026-07-15 da `2026-07-15-storage-originali-drive-lifecycle-r2-design.md`.
+> Motivi: Drive è stato implementato via **OAuth "come Luca"** (non service account + Shared Drive) e il
+> modello si è semplificato (originali diretti su Drive, R2 solo raw ≤7gg → niente cron di soglia).
+> Conservata per storico.
+>
 > Data: 2026-07-10. Terza fase del filone C (dopo C1 storage/chat e C2 riorganizza).
 > Policy definita da Matteo. Richiede il setup Google Drive (Shared Drive + service account).
 
