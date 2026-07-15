@@ -100,7 +100,7 @@ async function getDriveAuthClient(): Promise<GoogleOAuth2Client | null> {
   return client;
 }
 
-async function driveClient() {
+export async function driveClient() {
   const auth = await getDriveAuthClient();
   return auth ? google.drive({ version: "v3", auth }) : null;
 }
