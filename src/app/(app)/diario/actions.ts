@@ -13,7 +13,8 @@ import {
   type OrganizeResult,
 } from "@/lib/diary-organize";
 import { archiveR2KeyToDrive } from "@/lib/drive-archive";
-import { ensureDriveFolders } from "@/lib/drive-folders";
+import { ensureDriveFolders, resolveRawSubfolderKey } from "@/lib/drive-folders";
+import { moveDriveFile } from "@/lib/google-drive";
 
 /**
  * C1 — crea una DiaryEntry dopo che il client ha caricato il file su R2
@@ -141,6 +142,36 @@ export async function organizeDiaryAction(): Promise<{
 
   try {
     const { schede } = await organizeDiary(entries);
+
+    // Best-effort: sposta i raw già archiviati su Drive nella sottocartella
+    // corretta (raw/main vs raw/broll) in base alla classificazione C2.
+    // Effimero come `schede`: non deve mai far fallire l'azione.
+    try {
+      const folders = await ensureDriveFolders();
+      if (folders) {
+        const driveIdByEntry = new Map(
+          rows.filter((e) => e.driveFileId).map((e) => [e.id, e.driveFileId as string])
+        );
+        for (const scheda of schede) {
+          for (const m of scheda.media) {
+            const driveFileId = driveIdByEntry.get(m.entryId);
+            if (!driveFileId) continue;
+            const targetKey = resolveRawSubfolderKey(
+              m.ruolo === "contesto" ? "broll" : "main"
+            );
+            const target = folders[targetKey];
+            const opposite =
+              target === folders.rawMainFolderId
+                ? folders.rawBrollFolderId
+                : folders.rawMainFolderId;
+            await moveDriveFile(driveFileId, target, opposite);
+          }
+        }
+      }
+    } catch {
+      // best-effort: lo spostamento su Drive non deve bloccare l'organizzazione
+    }
+
     return { ok: true, schede };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Errore AI" };
