@@ -35,25 +35,25 @@ model Activity {
 }
 
 model Workspace {
-  id          String       @id @default(cuid())
-  name        String
-  plan        String       @default("free")
-  createdAt   DateTime     @default(now())
-  memberships        Membership[]
-  blocks             Block[]
-  contents           Content[]
-  comments           Comment[]
-  measurements       Measurement[]
-  benchmarks         Benchmark[]
-  valueConversations ValueConversation[]
-  calendarEvents     CalendarEvent[]
-  dashboardLayouts   DashboardLayout[]
-  audienceSegments   AudienceSegment[]
-  zernioSnapshots    ZernioSnapshot[]
-  contentClasses     ContentClass[]
-  chatThreads        ChatThread[]
-  chatMessages       ChatMessage[]
-  activities         Activity[]
+  id                   String                @id @default(cuid())
+  name                 String
+  plan                 String                @default("free")
+  createdAt            DateTime              @default(now())
+  memberships          Membership[]
+  blocks               Block[]
+  contents             Content[]
+  comments             Comment[]
+  measurements         Measurement[]
+  benchmarks           Benchmark[]
+  valueConversations   ValueConversation[]
+  calendarEvents       CalendarEvent[]
+  dashboardLayouts     DashboardLayout[]
+  audienceSegments     AudienceSegment[]
+  zernioSnapshots      ZernioSnapshot[]
+  contentClasses       ContentClass[]
+  chatThreads          ChatThread[]
+  chatMessages         ChatMessage[]
+  activities           Activity[]
   googleCalendarConfig GoogleCalendarConfig?
   googleLinks          GoogleCalendarLink[]
   socialAccounts       SocialAccount[]
@@ -61,21 +61,21 @@ model Workspace {
 }
 
 model User {
-  id          String       @id @default(cuid())
-  name        String?
-  email       String       @unique
-  image       String?
-  isAdmin     Boolean      @default(false)
-  createdAt   DateTime     @default(now())
+  id                  String            @id @default(cuid())
+  name                String?
+  email               String            @unique
+  image               String?
+  isAdmin             Boolean           @default(false)
+  createdAt           DateTime          @default(now())
   notificationsSeenAt DateTime? // ultimo momento in cui ha aperto il feed notifiche
-  telegramChatId   String? @unique // chat Telegram collegata (filoni T/N)
-  telegramLinkCode String? // codice temporaneo di collegamento
-  memberships Membership[]
-  accounts    Account[]
-  sessions    Session[]
-  comments    Comment[]
-  dashboardLayouts DashboardLayout[]
-  chatMessages ChatMessage[]
+  telegramChatId      String?           @unique // chat Telegram collegata (filoni T/N)
+  telegramLinkCode    String? // codice temporaneo di collegamento
+  memberships         Membership[]
+  accounts            Account[]
+  sessions            Session[]
+  comments            Comment[]
+  dashboardLayouts    DashboardLayout[]
+  chatMessages        ChatMessage[]
 }
 
 model Membership {
@@ -140,15 +140,15 @@ enum ContentFormat {
 }
 
 model Block {
-  id               String    @id @default(cuid())
+  id               String          @id @default(cuid())
   workspaceId      String
   label            String
   startDate        DateTime?
   endDate          DateTime?
   lucaDeliveryAt   DateTime?
   matteoDeliveryAt DateTime?
-  createdAt        DateTime  @default(now())
-  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt        DateTime        @default(now())
+  workspace        Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   contents         Content[]
   comments         Comment[]
   events           CalendarEvent[]
@@ -172,43 +172,44 @@ model CalendarEvent {
 }
 
 model Content {
-  id               String         @id @default(cuid())
-  workspaceId      String
-  blockId          String?
-  title            String
-  channel          Channel        @default(INSTAGRAM)
-  format           ContentFormat?
-  publishAt        DateTime?
-  hook             String?
-  notes            String?
-  deliveredAt      DateTime? // Luca ha segnato "materiale consegnato"
-  confirmedAt      DateTime? // Luca ha confermato il montato
-  statusOverride   String? // stato forzato a mano (override dell'auto-derivato dalle date)
-  materialsUrl     String?
-  thumbnailUrl     String?
-  videoProxyUrl    String? // proxy compresso di review su Blob
-  masterLink       String? // link al master esterno (Drive/iCloud), percorso C
+  id                  String           @id @default(cuid())
+  workspaceId         String
+  blockId             String?
+  title               String
+  channel             Channel          @default(INSTAGRAM)
+  format              ContentFormat?
+  publishAt           DateTime?
+  hook                String?
+  notes               String?
+  deliveredAt         DateTime? // Luca ha segnato "materiale consegnato"
+  confirmedAt         DateTime? // Luca ha confermato il montato
+  statusOverride      String? // stato forzato a mano (override dell'auto-derivato dalle date)
+  materialsUrl        String?
+  thumbnailUrl        String?
+  videoProxyUrl       String? // proxy compresso di review su Blob
+  masterLink          String? // link al master esterno (Drive/iCloud), percorso C
+  originalDriveFileId String? // originale di publish archiviato su Drive
   // performance (filled after publishing)
-  views            Int?
-  reach            Int?
-  nonFollowerPct   Float?
-  likes            Int?
-  commentsCount    Int?
-  saves            Int?
-  shares           Int?
-  followsGenerated Int?
+  views               Int?
+  reach               Int?
+  nonFollowerPct      Float?
+  likes               Int?
+  commentsCount       Int?
+  saves               Int?
+  shares              Int?
+  followsGenerated    Int?
   // integrazioni serata (Z ingestione / W pubblicazione)
-  externalId       String? // id del post sulla piattaforma (Zernio)
-  publishState     String? // null|"scheduled"|"publishing"|"published"|"failed"
-  publishError     String? // messaggio ultimo errore pubblicazione
-  createdAt        DateTime       @default(now())
-  workspace        Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  block            Block?         @relation(fields: [blockId], references: [id], onDelete: SetNull)
-  comments         Comment[]
-  snapshots        MetricSnapshot[]
-  classes          ContentClass[]
-  materials        Material[]
-  activities       Activity[]
+  externalId          String? // id del post sulla piattaforma (Zernio)
+  publishState        String? // null|"scheduled"|"publishing"|"published"|"failed"
+  publishError        String? // messaggio ultimo errore pubblicazione
+  createdAt           DateTime         @default(now())
+  workspace           Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  block               Block?           @relation(fields: [blockId], references: [id], onDelete: SetNull)
+  comments            Comment[]
+  snapshots           MetricSnapshot[]
+  classes             ContentClass[]
+  materials           Material[]
+  activities          Activity[]
 
   @@index([workspaceId])
   @@index([blockId])
@@ -216,31 +217,32 @@ model Content {
 }
 
 model Material {
-  id        String   @id @default(cuid())
-  contentId String
-  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
-  kind      String // "image" | "video"
-  url       String
-  order     Int      @default(0)
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  contentId   String
+  content     Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  kind        String // "image" | "video"
+  url         String
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  driveFileId String? // originale archiviato su Google Drive (Approccio A)
 
   @@index([contentId])
 }
 
 model Comment {
-  id          String    @id @default(cuid())
-  workspaceId String
-  contentId   String?
-  blockId     String?
-  authorId    String
-  body        String
-  audioUrl    String? // commento vocale su Blob
+  id             String    @id @default(cuid())
+  workspaceId    String
+  contentId      String?
+  blockId        String?
+  authorId       String
+  body           String
+  audioUrl       String? // commento vocale su Blob
   videoTimestamp Float? // secondo del video a cui è ancorato (null = generico)
-  createdAt   DateTime  @default(now())
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  content     Content?  @relation(fields: [contentId], references: [id], onDelete: Cascade)
-  block       Block?    @relation(fields: [blockId], references: [id], onDelete: Cascade)
-  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt      DateTime  @default(now())
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  content        Content?  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  block          Block?    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  author         User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([contentId])
@@ -433,7 +435,7 @@ model SocialAccount {
 }
 
 model DiaryEntry {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   workspaceId      String
   authorUserId     String?
   rawText          String?
@@ -449,8 +451,17 @@ model DiaryEntry {
   mediaSize        Int?
   archivedAt       DateTime? // valorizzato quando spostato su Drive (C3)
   driveFileId      String? // id file su Google Drive dopo l'archiviazione (C3)
-  createdAt        DateTime @default(now())
+  createdAt        DateTime  @default(now())
   workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, createdAt])
+}
+
+model DriveConfig {
+  id               String   @id @default("singleton")
+  rootFolderId     String?
+  rawMainFolderId  String?
+  rawBrollFolderId String?
+  editatiFolderId  String?
+  updatedAt        DateTime @updatedAt
 }
