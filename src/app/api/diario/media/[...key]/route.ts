@@ -43,10 +43,18 @@ export async function GET(
       const webStream = Readable.toWeb(
         nodeStream as Readable
       ) as unknown as ReadableStream;
+      const contentType =
+        entry.mediaType === "video"
+          ? "video/mp4"
+          : entry.mediaType === "audio"
+            ? "audio/mpeg"
+            : entry.mediaType === "image"
+              ? "image/jpeg"
+              : "application/octet-stream";
+      // TODO: Range support for large videos served from Drive
       return new NextResponse(webStream, {
         headers: {
-          "Content-Type":
-            entry.mediaType === "video" ? "video/mp4" : "application/octet-stream",
+          "Content-Type": contentType,
         },
       });
     }

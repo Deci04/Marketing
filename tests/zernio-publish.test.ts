@@ -20,9 +20,16 @@ vi.mock("@/lib/current", () => ({
 }));
 vi.mock("@vercel/blob", () => ({ put: vi.fn(), del: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// L'archiviazione su Drive non è esercitata da queste suite (nessuna credenziale
+// Drive nel test env): la mockiamo per poter esercitare separatamente il path
+// "archivio riuscito → Blob cancellato" e il path "archivio non riuscito → Blob conservato".
+vi.mock("@/lib/drive-archive", () => ({
+  archiveBlobUrlToDrive: vi.fn(async () => null as string | null),
+}));
 
 import { currentContext } from "@/lib/current";
 import { del } from "@vercel/blob";
+import { archiveBlobUrlToDrive } from "@/lib/drive-archive";
 import { publishContentAction } from "@/app/(app)/contenuti/actions";
 
 // Queste suite testano il PATH LIVE con la rete mockata: disattiviamo il
@@ -73,6 +80,8 @@ afterAll(async () => {
 beforeEach(() => {
   vi.mocked(del).mockReset();
   vi.mocked(del).mockResolvedValue(undefined as never);
+  vi.mocked(archiveBlobUrlToDrive).mockReset();
+  vi.mocked(archiveBlobUrlToDrive).mockResolvedValue(null);
   setCtx(ADMIN);
 });
 
@@ -141,7 +150,8 @@ describe("publishContentAction — ciclo di vita", () => {
     expect(del).not.toHaveBeenCalled();
   });
 
-  it("successo con originale caricato su Blob: cancella l'originale (resta il proxy)", async () => {
+  it("successo con originale caricato su Blob e archivio Drive riuscito: cancella l'originale (resta il proxy)", async () => {
+    vi.mocked(archiveBlobUrlToDrive).mockResolvedValue("drive_file_1");
     const c = await makeContent({ masterLink: null });
     vi.spyOn(global, "fetch").mockResolvedValue(okResponse("zx_blob"));
     const uploaded = "https://blob.example/originals/orig.mp4";
@@ -156,6 +166,25 @@ describe("publishContentAction — ciclo di vita", () => {
     const saved = await db.content.findFirst({ where: scopedWhere(ws.id, { id: c.id }) });
     expect(saved?.publishState).toBe("published");
     expect(saved?.videoProxyUrl).toBe(PROXY); // il proxy resta
+    expect(saved?.originalDriveFileId).toBe("drive_file_1");
+  });
+
+  it("successo con originale caricato su Blob ma archivio Drive fallito: NON cancella l'originale (nessuna copia altrove)", async () => {
+    vi.mocked(archiveBlobUrlToDrive).mockResolvedValue(null); // Drive non connesso/errore
+    const c = await makeContent({ masterLink: null });
+    vi.spyOn(global, "fetch").mockResolvedValue(okResponse("zx_blob2"));
+    const uploaded = "https://blob.example/originals/orig3.mp4";
+    const fd = new FormData();
+    fd.set("contentId", c.id);
+    fd.set("originalUrl", uploaded);
+    fd.append("platforms", "INSTAGRAM");
+
+    const res = await publishContentAction(fd);
+    expect(res.ok).toBe(true);
+    expect(del).not.toHaveBeenCalled();
+    const saved = await db.content.findFirst({ where: scopedWhere(ws.id, { id: c.id }) });
+    expect(saved?.publishState).toBe("published");
+    expect(saved?.originalDriveFileId).toBeNull();
   });
 
   it("errore Zernio: publishState=failed + publishError e NON cancella l'originale (retry)", async () => {

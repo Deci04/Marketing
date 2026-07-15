@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import {
   S3Client,
   PutObjectCommand,
@@ -83,4 +84,12 @@ export async function getObjectBytes(key: string): Promise<Uint8Array> {
   return (obj.Body as {
     transformToByteArray: () => Promise<Uint8Array>;
   }).transformToByteArray();
+}
+
+/** Stream di lettura dell'oggetto R2 (per archiviazione senza bufferizzare in RAM). */
+export async function getObjectStream(key: string): Promise<Readable> {
+  const obj = await client().send(
+    new GetObjectCommand({ Bucket: bucket(), Key: key })
+  );
+  return obj.Body as Readable;
 }

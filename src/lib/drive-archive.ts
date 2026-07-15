@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
 import { uploadToDrive, driveClient } from "@/lib/google-drive";
-import { getObjectBytes } from "@/lib/r2";
+import { getObjectStream } from "@/lib/r2";
 
 /** Scarica un Blob pubblico e lo streama su Drive. Ritorna il driveFileId o null. */
 export async function archiveBlobUrlToDrive(opts: {
@@ -23,8 +23,7 @@ export async function archiveR2KeyToDrive(opts: {
   mimeType: string;
   folderId?: string;
 }): Promise<string | null> {
-  const bytes = await getObjectBytes(opts.r2Key);
-  const body = Readable.from(Buffer.from(bytes));
+  const body = await getObjectStream(opts.r2Key);
   return uploadToDrive({ name: opts.name, mimeType: opts.mimeType, body, folderId: opts.folderId });
 }
 

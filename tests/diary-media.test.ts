@@ -5,6 +5,9 @@ vi.mock("@/lib/r2", () => ({
   isConfigured: vi.fn(() => true),
   presignGet: vi.fn(async (key: string) => `https://r2.example/${key}?sig=x`),
 }));
+vi.mock("@/lib/db", () => ({
+  db: { diaryEntry: { findFirst: vi.fn(async () => null) } },
+}));
 
 import { currentContext } from "@/lib/current";
 import { GET } from "@/app/api/diario/media/[...key]/route";
