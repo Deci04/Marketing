@@ -471,6 +471,20 @@ export async function addMaterial(
   return m;
 }
 
+/** Salva l'id del file originale archiviato su Drive per un Material. */
+export async function setMaterialDriveFileId(
+  workspaceId: string,
+  materialId: string,
+  driveFileId: string
+) {
+  const m = await db.material.findFirst({
+    where: { id: materialId, content: scopedWhere(workspaceId, {}) },
+    select: { id: true },
+  });
+  if (!m) return null;
+  return db.material.update({ where: { id: materialId }, data: { driveFileId } });
+}
+
 export async function removeMaterial(workspaceId: string, materialId: string) {
   const m = await db.material.findFirst({
     where: { id: materialId, content: { workspaceId } },

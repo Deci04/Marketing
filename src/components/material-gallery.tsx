@@ -16,7 +16,11 @@ import {
   compressAndUploadVideoProxy,
   VideoTooLargeError,
 } from "@/lib/video-upload-client";
-import { addMaterialAction, removeMaterialAction } from "@/app/(app)/contenuti/actions";
+import {
+  addMaterialAction,
+  archiveMaterialOriginalAction,
+  removeMaterialAction,
+} from "@/app/(app)/contenuti/actions";
 
 export type GalleryImage = { id: string; url: string };
 
@@ -88,7 +92,21 @@ export function MaterialGallery({
       fd.set("contentId", contentId);
       fd.set("kind", "video");
       fd.set("url", blob.url);
-      await addMaterialAction(fd);
+      const { materialId } = await addMaterialAction(fd);
+
+      // Archivia l'ORIGINALE su Drive (client→Blob → server streama Blob→Drive → cancella Blob).
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const original = await uploadViaServer(
+        file,
+        `originals/materials/${contentId}`,
+        safe
+      );
+      const afd = new FormData();
+      afd.set("materialId", materialId);
+      afd.set("originalUrl", original.url);
+      afd.set("filename", file.name);
+      afd.set("mimeType", file.type || "video/mp4");
+      await archiveMaterialOriginalAction(afd); // best-effort: non blocca la UI se Drive è off
       toast.success("Video caricato");
       router.refresh();
     } catch (err) {

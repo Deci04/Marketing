@@ -26,7 +26,10 @@ import {
   contentHasMontato,
   setNotificationsSeen,
   setContentStatus,
+  setMaterialDriveFileId,
 } from "@/lib/content";
+import { archiveBlobUrlToDrive } from "@/lib/drive-archive";
+import { ensureDriveFolders } from "@/lib/drive-folders";
 import { isDerivedStatus } from "@/lib/status";
 import { createActivity } from "@/lib/activity";
 import {
@@ -372,7 +375,9 @@ export async function setVideoProxyAction(formData: FormData) {
 }
 
 /** Materiali — aggiungi un materiale (foto o video) già caricato su Blob. */
-export async function addMaterialAction(formData: FormData) {
+export async function addMaterialAction(
+  formData: FormData
+): Promise<{ materialId: string }> {
   const ctx = await currentContext();
   if (!ctx) throw new Error("Non autorizzato");
   const contentId = String(formData.get("contentId") ?? "");
@@ -382,7 +387,8 @@ export async function addMaterialAction(formData: FormData) {
     throw new Error("Dati materiale non validi");
   }
   const hadMontato = await contentHasMontato(ctx.workspaceId, contentId);
-  await addMaterial(ctx.workspaceId, contentId, kind, url);
+  const created = await addMaterial(ctx.workspaceId, contentId, kind, url);
+  if (!created) throw new Error("Contenuto non trovato");
   if (!hadMontato) {
     await createActivity(ctx.workspaceId, {
       type: "REVIEW_READY",
@@ -393,6 +399,30 @@ export async function addMaterialAction(formData: FormData) {
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
   revalidatePath("/home");
+  return { materialId: created.id };
+}
+
+/** Archivia su Drive l'originale (già caricato su Blob) di un Material video, poi
+ *  cancella l'originale da Blob (resta il proxy). Best-effort: su errore lascia il Blob. */
+export async function archiveMaterialOriginalAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) throw new Error("Non autorizzato");
+  const materialId = String(formData.get("materialId") ?? "").trim();
+  const originalUrl = String(formData.get("originalUrl") ?? "").trim();
+  const filename = String(formData.get("filename") ?? "original").trim();
+  const mimeType = String(formData.get("mimeType") ?? "video/mp4").trim();
+  if (!materialId || !originalUrl) return;
+
+  const folders = await ensureDriveFolders();
+  const driveFileId = await archiveBlobUrlToDrive({
+    url: originalUrl,
+    name: filename,
+    mimeType,
+    folderId: folders?.rawMainFolderId, // materiale montato → raw/main per default
+  });
+  if (!driveFileId) return; // Drive non connesso o fallito: non cancellare da Blob
+  await setMaterialDriveFileId(ctx.workspaceId, materialId, driveFileId);
+  await del(originalUrl).catch(() => {}); // `del` già importato in questo file
 }
 
 /** Materiali — rimuovi un materiale. */
