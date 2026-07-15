@@ -130,3 +130,19 @@ export async function deleteDriveFile(fileId: string): Promise<void> {
   if (!drive) return;
   await drive.files.delete({ fileId }).catch(() => {});
 }
+
+/** Sposta un file Drive tra cartelle (usato quando C2 classifica main/broll). */
+export async function moveDriveFile(
+  fileId: string,
+  addParentId: string,
+  removeParentId?: string
+): Promise<void> {
+  const drive = await driveClient();
+  if (!drive) return;
+  await drive.files.update({
+    fileId,
+    addParents: addParentId,
+    ...(removeParentId ? { removeParents: removeParentId } : {}),
+    fields: "id",
+  }).catch(() => {});
+}
