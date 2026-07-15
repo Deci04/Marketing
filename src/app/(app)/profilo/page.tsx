@@ -4,6 +4,7 @@ import { currentUser, currentContext } from "@/lib/current";
 import { signOut } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isConfigured as googleConfigured } from "@/lib/google-calendar";
+import { isDriveConnected } from "@/lib/google-drive";
 import { isConfigured as zernioConfigured } from "@/lib/zernio";
 import { createWorkspaceAction, disconnectSocialAccountAction } from "./actions";
 import { TelegramLink } from "@/components/profilo/telegram-link";
@@ -14,6 +15,7 @@ import {
   SignOut,
   ArrowRight,
   CalendarCheck,
+  HardDrives,
   CheckCircle,
   PlugsConnected,
   InstagramLogo,
@@ -38,6 +40,10 @@ const GOOGLE_BANNER: Record<string, { text: string; ok: boolean }> = {
   connected: { text: "Google Calendar collegato.", ok: true },
   error: { text: "Collegamento Google non riuscito. Riprova.", ok: false },
 };
+const DRIVE_BANNER: Record<string, { text: string; ok: boolean }> = {
+  connected: { text: "Google Drive collegato (archivio originali).", ok: true },
+  error: { text: "Collegamento Google Drive non riuscito. Riprova.", ok: false },
+};
 
 const TILES = [
   "bg-lavender text-lavender-ink",
@@ -57,7 +63,7 @@ export default async function ProfiloPage({
 
   const sp = await searchParams;
   const ctx = await currentContext();
-  const [googleCfg, socialAccounts] = ctx
+  const [googleCfg, socialAccounts, driveConnected] = ctx
     ? await Promise.all([
         db.googleCalendarConfig.findUnique({
           where: { workspaceId: ctx.workspaceId },
@@ -65,8 +71,9 @@ export default async function ProfiloPage({
         db.socialAccount.findMany({
           where: { workspaceId: ctx.workspaceId },
         }),
+        isDriveConnected(),
       ])
-    : [null, []];
+    : [null, [], false];
   const socialByPlatform = new Map(
     socialAccounts.map((a) => [a.platform, a])
   );
@@ -74,6 +81,8 @@ export default async function ProfiloPage({
     typeof sp.zernio === "string" ? ZERNIO_BANNER[sp.zernio] : undefined;
   const googleBanner =
     typeof sp.google === "string" ? GOOGLE_BANNER[sp.google] : undefined;
+  const driveBanner =
+    typeof sp.drive === "string" ? DRIVE_BANNER[sp.drive] : undefined;
 
   const spaces = user.isAdmin
     ? await db.workspace.findMany({
@@ -196,9 +205,9 @@ export default async function ProfiloPage({
             <h2 className="text-xl">Integrazioni</h2>
           </div>
 
-          {(zernioBanner || googleBanner) && (
+          {(zernioBanner || googleBanner || driveBanner) && (
             <div className="space-y-2">
-              {[zernioBanner, googleBanner]
+              {[zernioBanner, googleBanner, driveBanner]
                 .filter((b): b is { text: string; ok: boolean } => !!b)
                 .map((b, i) => (
                   <p
@@ -242,6 +251,42 @@ export default async function ProfiloPage({
               >
                 <CalendarCheck size={16} /> Connetti Google Calendar
               </a>
+            )}
+          </div>
+
+          {/* Google Drive (archivio originali) */}
+          <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+            <div className="flex items-center gap-2">
+              <HardDrives size={20} className="text-butter-ink" />
+              <h3 className="text-lg">Google Drive</h3>
+              {driveConnected && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-sage px-2.5 py-1 text-[11px] font-medium text-sage-ink">
+                  <CheckCircle size={13} weight="fill" /> Collegato
+                </span>
+              )}
+            </div>
+            {!googleConfigured() ? (
+              <p className="text-sm text-muted-foreground">
+                Google non è configurato.
+              </p>
+            ) : driveConnected ? (
+              <p className="text-sm text-muted-foreground">
+                Gli originali dei video vengono archiviati su Drive. Accedi con
+                l&apos;account (personale) con lo spazio.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Collega l&apos;account Google (personale, con lo spazio) dove
+                  archiviare gli originali a piena qualità.
+                </p>
+                <a
+                  href="/api/integrations/google-drive/authorize"
+                  className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
+                >
+                  <HardDrives size={16} /> Connetti Google Drive
+                </a>
+              </>
             )}
           </div>
 
