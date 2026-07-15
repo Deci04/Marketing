@@ -6,7 +6,12 @@ import { db } from "@/lib/db";
 import { isConfigured as googleConfigured } from "@/lib/google-calendar";
 import { isDriveConnected } from "@/lib/google-drive";
 import { isConfigured as zernioConfigured } from "@/lib/zernio";
-import { createWorkspaceAction, disconnectSocialAccountAction } from "./actions";
+import {
+  createWorkspaceAction,
+  disconnectSocialAccountAction,
+  disconnectGoogleCalendarAction,
+  disconnectGoogleDriveAction,
+} from "./actions";
 import { TelegramLink } from "@/components/profilo/telegram-link";
 import {
   UsersThree,
@@ -240,10 +245,20 @@ export default async function ProfiloPage({
                 Google Calendar non è configurato.
               </p>
             ) : googleCfg ? (
-              <p className="text-sm text-muted-foreground">
-                Gli eventi si sincronizzano con il calendario dedicato dello
-                spazio.
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Gli eventi si sincronizzano con il calendario dedicato dello
+                  spazio.
+                </p>
+                <form action={disconnectGoogleCalendarAction}>
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-ink"
+                  >
+                    Disconnetti
+                  </button>
+                </form>
+              </div>
             ) : (
               <a
                 href="/api/integrations/google/authorize"
@@ -270,10 +285,19 @@ export default async function ProfiloPage({
                 Google non è configurato.
               </p>
             ) : driveConnected ? (
-              <p className="text-sm text-muted-foreground">
-                Gli originali dei video vengono archiviati su Drive. Accedi con
-                l&apos;account (personale) con lo spazio.
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm text-muted-foreground">
+                  Gli originali dei video vengono archiviati su Drive.
+                </p>
+                <form action={disconnectGoogleDriveAction}>
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-ink"
+                  >
+                    Disconnetti
+                  </button>
+                </form>
+              </div>
             ) : (
               <>
                 <p className="text-sm text-muted-foreground">

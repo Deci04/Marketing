@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { Role } from "@prisma/client";
 import { db } from "@/lib/db";
-import { currentUser } from "@/lib/current";
+import { currentUser, currentContext } from "@/lib/current";
 import { setTelegramLinkCode } from "@/lib/telegram-link";
 import { disconnectAccount } from "@/lib/zernio";
+import { stopWatch, GOOGLE_PROVIDER } from "@/lib/google-calendar";
 
 async function requireAdmin() {
   const u = await currentUser();
@@ -67,6 +68,27 @@ export async function disconnectSocialAccountAction(formData: FormData) {
   if (!zernioAccountId) return;
   await disconnectAccount(zernioAccountId);
   await db.socialAccount.deleteMany({ where: { zernioAccountId } });
+  revalidatePath("/profilo");
+}
+
+/** Disconnette Google Calendar: ferma il watch-channel, rimuove config e token. */
+export async function disconnectGoogleCalendarAction() {
+  await requireAdmin();
+  const ctx = await currentContext();
+  if (ctx) {
+    await stopWatch(ctx.workspaceId).catch(() => {});
+    await db.googleCalendarConfig.deleteMany({
+      where: { workspaceId: ctx.workspaceId },
+    });
+  }
+  await db.account.deleteMany({ where: { provider: GOOGLE_PROVIDER } });
+  revalidatePath("/profilo");
+}
+
+/** Disconnette Google Drive: rimuove il token OAuth salvato. */
+export async function disconnectGoogleDriveAction() {
+  await requireAdmin();
+  await db.account.deleteMany({ where: { provider: "google-drive" } });
   revalidatePath("/profilo");
 }
 
