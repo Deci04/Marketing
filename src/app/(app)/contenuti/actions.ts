@@ -413,16 +413,21 @@ export async function archiveMaterialOriginalAction(formData: FormData) {
   const mimeType = String(formData.get("mimeType") ?? "video/mp4").trim();
   if (!materialId || !originalUrl) return;
 
-  const folders = await ensureDriveFolders();
-  const driveFileId = await archiveBlobUrlToDrive({
-    url: originalUrl,
-    name: filename,
-    mimeType,
-    folderId: folders?.rawMainFolderId, // materiale montato → raw/main per default
-  });
-  if (!driveFileId) return; // Drive non connesso o fallito: non cancellare da Blob
-  await setMaterialDriveFileId(ctx.workspaceId, materialId, driveFileId);
-  await del(originalUrl).catch(() => {}); // `del` già importato in questo file
+  try {
+    const folders = await ensureDriveFolders();
+    const driveFileId = await archiveBlobUrlToDrive({
+      url: originalUrl,
+      name: filename,
+      mimeType,
+      folderId: folders?.rawMainFolderId, // materiale montato → raw/main per default
+    });
+    if (!driveFileId) return; // Drive non connesso o fallito: non cancellare da Blob
+    const saved = await setMaterialDriveFileId(ctx.workspaceId, materialId, driveFileId);
+    if (!saved) return; // material sparito: non cancellare l'originale (nessun riferimento al file Drive)
+    await del(originalUrl).catch(() => {}); // `del` già importato in questo file
+  } catch {
+    // best-effort: su errore lascia l'originale su Blob per un retry futuro
+  }
 }
 
 /** Materiali — rimuovi un materiale. */
