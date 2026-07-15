@@ -53,7 +53,7 @@ export default async function AppLayout({
         }
       />
       <div className="relative hidden w-16 shrink-0 md:block">
-        <aside className="absolute left-0 top-0 z-30 flex h-[calc(100vh-1.5rem)] flex-col gap-2">
+        <aside className="sticky top-3 z-30 flex h-[calc(100vh-1.5rem)] flex-col gap-2">
           <div
             className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ink font-heading text-lg text-paper shadow-md"
             title={ctx?.workspace.name ?? ""}
