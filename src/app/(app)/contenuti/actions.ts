@@ -242,6 +242,30 @@ export async function publishContentAction(
     },
   });
 
+  // Archivia su Drive l'originale caricato al momento del publish, se presente,
+  // indipendentemente da scheduledAt (anche i programmati vanno archiviati:
+  // il Blob per quelli non viene cancellato subito, ma l'archivio è comunque utile).
+  // Best-effort: il post è già pubblicato, un fallimento qui non deve bloccare nulla.
+  if (uploadedOriginalUrl) {
+    try {
+      const folders = await ensureDriveFolders();
+      const driveFileId = await archiveBlobUrlToDrive({
+        url: uploadedOriginalUrl,
+        name: `${content.title || content.id}-original`,
+        mimeType: "video/mp4",
+        folderId: folders?.editatiFolderId, // originale pubblicato → editati
+      });
+      if (driveFileId) {
+        await db.content.update({
+          where: { id: content.id },
+          data: { originalDriveFileId: driveFileId },
+        });
+      }
+    } catch {
+      // best-effort: il publish ha già avuto successo, non blocchiamo su un errore di archiviazione
+    }
+  }
+
   // Se avevamo caricato l'originale su Blob e il post è già pubblicato (non
   // programmato), lo cancelliamo: resta solo il proxy. Per i programmati NON si
   // cancella (Zernio potrebbe attingervi al momento dell'uscita).
