@@ -10,7 +10,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 // Regola: upload sempre client→R2 diretto con presigned PUT; mai POST form (R2 → 501).
 
 const acc = () => process.env.R2_ACCOUNT_ID ?? "";
-const bucket = () => process.env.R2_BUCKET ?? "";
+export const bucket = () => process.env.R2_BUCKET ?? "";
 
 export function isConfigured(): boolean {
   return !!(
