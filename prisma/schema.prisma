@@ -91,6 +91,12 @@ model PushSubscription {
   @@index([userId])
 }
 
+model PushDispatch {
+  id        String   @id @default(cuid())
+  dedupeKey String   @unique
+  sentAt    DateTime @default(now())
+}
+
 model Membership {
   id          String    @id @default(cuid())
   role        Role      @default(COLLABORATOR)
