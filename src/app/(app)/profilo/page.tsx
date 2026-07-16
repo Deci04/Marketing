@@ -13,6 +13,7 @@ import {
   disconnectGoogleDriveAction,
 } from "./actions";
 import { TelegramLink } from "@/components/profilo/telegram-link";
+import { PushToggle } from "@/components/push/push-toggle";
 import {
   UsersThree,
   Plus,
@@ -376,6 +377,9 @@ export default async function ProfiloPage({
             linked={!!user.telegramChatId}
             code={user.telegramLinkCode ?? null}
           />
+
+          {/* Notifiche push */}
+          <PushToggle />
         </section>
       )}
     </div>
