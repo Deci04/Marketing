@@ -16,6 +16,17 @@ const nextConfig: NextConfig = {
     "gcp-metadata",
     "gtoken",
   ],
+  // Router Cache lato client: le route dinamiche (Calendario/Contenuti/…) di default
+  // hanno TTL 0 → ogni ri-visita rifà il round-trip al server (+ eventuale cold-start
+  // Neon). Con `staleTimes.dynamic` la seconda visita entro N secondi è servita dalla
+  // cache client → passaggio quasi istantaneo. 25s: abbastanza per il rimbalzo tra
+  // sezioni, abbastanza breve da non mostrare dati troppo stantii (le mutazioni sulla
+  // route corrente fanno comunque refresh via revalidatePath/router.refresh).
+  experimental: {
+    staleTimes: {
+      dynamic: 25,
+    },
+  },
 };
 
 export default nextConfig;
