@@ -95,6 +95,27 @@ export async function markDeliveredAction(formData: FormData) {
   revalidatePath("/home");
 }
 
+/** Luca: mark an entire block delivered in one tap — every content in the
+ *  block still "da consegnare" (deliveredAt == null) gets delivered. Powers
+ *  the "Ho consegnato" CTA on the per-block home notification. */
+export async function markBlockDeliveredAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const blockId = String(formData.get("blockId") ?? "").trim();
+  if (!blockId) return;
+  // tutti i content del blocco ancora "da consegnare" (deliveredAt == null)
+  const rows = await db.content.findMany({
+    where: scopedWhere(ctx.workspaceId, { blockId, deliveredAt: null }),
+    select: { id: true },
+  });
+  for (const r of rows) {
+    await setDelivered(ctx.workspaceId, r.id);
+    await createActivity(ctx.workspaceId, { type: "DELIVERED", contentId: r.id, actorId: ctx.user.id });
+  }
+  revalidatePath("/home");
+  revalidatePath("/contenuti");
+}
+
 /** Luca: confirm the montato. */
 export async function confirmContentAction(formData: FormData) {
   const ctx = await currentContext();

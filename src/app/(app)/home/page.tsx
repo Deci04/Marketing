@@ -3,6 +3,7 @@ import { currentContext } from "@/lib/current";
 import { listContents } from "@/lib/content";
 import { countValueConversations } from "@/lib/kpi";
 import { homeActions, type HomeContent } from "@/lib/workflow";
+import { MarkBlockDeliveredButton } from "@/components/mark-block-delivered-button";
 import { HomeIllustration } from "@/components/home-illustration";
 import {
   ArrowRight,
@@ -40,7 +41,10 @@ export default async function HomePage() {
     format: c.format,
     confirmedAt: c.confirmedAt,
     hasMontato: c.videoProxyUrl != null || c._count.materials > 0,
-    block: c.block ? { lucaDeliveryAt: c.block.lucaDeliveryAt } : null,
+    deliveredAt: c.deliveredAt,
+    block: c.block
+      ? { id: c.block.id, label: c.block.label, lucaDeliveryAt: c.block.lucaDeliveryAt }
+      : null,
   }));
   const actions = homeActions(homeContents, role, new Date());
   const byId = new Map(contents.map((c) => [c.id, c]));
@@ -126,6 +130,7 @@ export default async function HomePage() {
                   <span className="min-w-0 flex-1 text-[15px] font-medium text-ink">
                     {a.text}
                   </span>
+                  {a.blockId && <MarkBlockDeliveredButton blockId={a.blockId} />}
                   <ArrowRight
                     size={16}
                     className="shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
