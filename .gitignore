@@ -46,3 +46,6 @@ next-env.d.ts
 # graphify — all outputs are regenerable (and rebuilt by the post-checkout/commit
 # hooks), so ignore the whole dir to avoid churn. Run /graphify to (re)build.
 graphify-out/
+
+# scratch SDD (subagent-driven-development ledger/brief/report)
+.superpowers/
