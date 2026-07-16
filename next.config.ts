@@ -15,6 +15,7 @@ const nextConfig: NextConfig = {
     "gaxios",
     "gcp-metadata",
     "gtoken",
+    "web-push",
   ],
   // Router Cache lato client: le route dinamiche (Calendario/Contenuti/…) di default
   // hanno TTL 0 → ogni ri-visita rifà il round-trip al server (+ eventuale cold-start
