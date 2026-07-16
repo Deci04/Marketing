@@ -1,7 +1,5 @@
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
-import { chatIdForUser } from "@/lib/telegram-link";
-import { sendMessage } from "@/lib/telegram";
 import { isPushConfigured, sendPushToUser } from "@/lib/web-push";
 import type { ActivityType } from "@prisma/client";
 
@@ -17,9 +15,8 @@ export async function createActivity(
       actorId: data.actorId ?? null,
     },
   });
-  // Hook notifiche esterne — acceso dal filone N. No-op finché non implementato.
-  await notifyTelegramForActivity(activity).catch(() => {});
-  // Push notifiche browser/device (PWA parte B). No-op se VAPID non è configurata.
+  // Push notifiche browser/device (PWA parte B) — unico canale notifiche. No-op
+  // se VAPID non è configurata.
   await notifyWebPushForActivity(activity).catch(() => {});
   return activity;
 }
@@ -74,66 +71,6 @@ function contentLink(contentId: string | null): string | null {
   const path = `/contenuti/${contentId}`;
   const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "");
   return base ? `${base}${path}` : path;
-}
-
-/**
- * Filone N: dopo ogni createActivity, notifica via Telegram i membri del workspace
- * diversi dall'actor che hanno una chat collegata. Best-effort: non lancia mai.
- */
-export async function notifyTelegramForActivity(activity: {
-  workspaceId: string;
-  type: ActivityType;
-  contentId: string | null;
-  actorId: string | null;
-}): Promise<void> {
-  try {
-    if (!PUSH_TYPES.has(activity.type)) return;
-
-    // Destinatari: membri del workspace diversi dall'actor.
-    const memberships = await db.membership.findMany({
-      where: scopedWhere(
-        activity.workspaceId,
-        activity.actorId ? { userId: { not: activity.actorId } } : {}
-      ),
-      select: { userId: true },
-    });
-    if (memberships.length === 0) return;
-
-    // Arricchimenti opzionali: nome dell'actor e titolo del contenuto.
-    const [actor, content] = await Promise.all([
-      activity.actorId
-        ? db.user
-            .findUnique({
-              where: { id: activity.actorId },
-              select: { name: true, email: true },
-            })
-            .catch(() => null)
-        : Promise.resolve(null),
-      activity.contentId
-        ? db.content
-            .findFirst({
-              where: scopedWhere(activity.workspaceId, { id: activity.contentId }),
-              select: { title: true },
-            })
-            .catch(() => null)
-        : Promise.resolve(null),
-    ]);
-
-    const actorName = actor?.name ?? actor?.email ?? null;
-    const title = content?.title ?? null;
-    const link = contentLink(activity.contentId);
-    const text = composeText(activity.type, actorName, title, link);
-
-    await Promise.all(
-      memberships.map(async (m) => {
-        const chatId = await chatIdForUser(m.userId).catch(() => null);
-        if (!chatId) return; // destinatario senza Telegram → no-op naturale
-        await sendMessage(chatId, text).catch(() => {});
-      })
-    );
-  } catch {
-    // Notifica interamente best-effort: non deve mai far fallire createActivity.
-  }
 }
 
 /** Titolo breve per la notifica push (il corpo lo fa già composeText). */

@@ -1,18 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { membership, user, content, chatIdForUser, sendMessage } = vi.hoisted(() => ({
+const { membership, user, content, isPushConfigured, sendPushToUser } = vi.hoisted(() => ({
   membership: { findMany: vi.fn() },
   user: { findUnique: vi.fn() },
   content: { findFirst: vi.fn() },
-  chatIdForUser: vi.fn(),
-  sendMessage: vi.fn(),
+  isPushConfigured: vi.fn(),
+  sendPushToUser: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({ db: { membership, user, content } }));
-vi.mock("@/lib/telegram-link", () => ({ chatIdForUser }));
-vi.mock("@/lib/telegram", () => ({ sendMessage }));
+vi.mock("@/lib/web-push", () => ({ isPushConfigured, sendPushToUser }));
 
-import { notifyTelegramForActivity } from "@/lib/activity";
+import { notifyWebPushForActivity } from "@/lib/activity";
 import type { ActivityType } from "@prisma/client";
 
 const WS = "ws1";
@@ -27,91 +26,94 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Workspace a 2: actor + l'altro. La query deve escludere l'actor,
   // quindi il default restituisce solo "l'altro".
+  isPushConfigured.mockReturnValue(true);
   membership.findMany.mockResolvedValue([{ userId: OTHER }]);
   user.findUnique.mockResolvedValue({ name: "Luca", email: "luca@t.it" });
   content.findFirst.mockResolvedValue({ title: "Reel prodotto X" });
-  chatIdForUser.mockResolvedValue("chat_matteo");
-  sendMessage.mockResolvedValue(undefined);
+  sendPushToUser.mockResolvedValue(undefined);
 });
 
-describe("notifyTelegramForActivity", () => {
+describe("notifyWebPushForActivity", () => {
+  it("no-op totale se il push non è configurato (VAPID assente)", async () => {
+    isPushConfigured.mockReturnValue(false);
+    await notifyWebPushForActivity(activity("DELIVERED"));
+    expect(membership.findMany).not.toHaveBeenCalled();
+    expect(sendPushToUser).not.toHaveBeenCalled();
+  });
+
   it("CREATED non invia alcuna notifica push (solo campanella)", async () => {
-    await notifyTelegramForActivity(activity("CREATED"));
-    expect(sendMessage).not.toHaveBeenCalled();
+    await notifyWebPushForActivity(activity("CREATED"));
+    expect(sendPushToUser).not.toHaveBeenCalled();
   });
 
   it("un tipo non-push non invia", async () => {
-    await notifyTelegramForActivity(activity("CREATED"));
+    await notifyWebPushForActivity(activity("CREATED"));
     // e nemmeno interroga i destinatari
     expect(membership.findMany).not.toHaveBeenCalled();
   });
 
   it("DELIVERED notifica l'altro membro con titolo + link", async () => {
-    await notifyTelegramForActivity(activity("DELIVERED"));
-    expect(sendMessage).toHaveBeenCalledTimes(1);
-    const [chatId, text] = sendMessage.mock.calls[0];
-    expect(chatId).toBe("chat_matteo");
-    expect(text).toContain("Luca");
-    expect(text).toContain("consegnato");
-    expect(text).toContain("«Reel prodotto X»");
-    expect(text).toContain("/contenuti/c1");
+    await notifyWebPushForActivity(activity("DELIVERED"));
+    expect(sendPushToUser).toHaveBeenCalledTimes(1);
+    const [userId, payload] = sendPushToUser.mock.calls[0];
+    expect(userId).toBe(OTHER);
+    expect(payload.title).toBeTruthy();
+    expect(payload.body).toContain("Luca");
+    expect(payload.body).toContain("consegnato");
+    expect(payload.body).toContain("«Reel prodotto X»");
+    expect(payload.body).toContain("/contenuti/c1");
+    expect(payload.url).toContain("/contenuti/c1");
   });
 
   it("REVIEW_READY, CONFIRMED e COMMENT inviano tutti", async () => {
     for (const t of ["REVIEW_READY", "CONFIRMED", "COMMENT"] as ActivityType[]) {
-      sendMessage.mockClear();
-      await notifyTelegramForActivity(activity(t));
-      expect(sendMessage).toHaveBeenCalledTimes(1);
+      sendPushToUser.mockClear();
+      await notifyWebPushForActivity(activity(t));
+      expect(sendPushToUser).toHaveBeenCalledTimes(1);
     }
   });
 
   it("la query destinatari esclude l'actor (scopedWhere + userId not)", async () => {
-    await notifyTelegramForActivity(activity("DELIVERED"));
+    await notifyWebPushForActivity(activity("DELIVERED"));
     const arg = membership.findMany.mock.calls[0][0];
     expect(arg.where.workspaceId).toBe(WS);
     expect(arg.where.userId).toEqual({ not: ACTOR });
   });
 
-  it("l'actor non riceve nulla se è l'unico membro con chat", async () => {
+  it("l'actor non riceve nulla se è l'unico membro del workspace", async () => {
     // Simula: la query (che esclude l'actor) non restituisce nessuno.
     membership.findMany.mockResolvedValue([]);
-    await notifyTelegramForActivity(activity("DELIVERED"));
-    expect(sendMessage).not.toHaveBeenCalled();
-  });
-
-  it("destinatario senza chatId collegato = nessun invio", async () => {
-    chatIdForUser.mockResolvedValue(null);
-    await notifyTelegramForActivity(activity("DELIVERED"));
-    expect(chatIdForUser).toHaveBeenCalledWith(OTHER);
-    expect(sendMessage).not.toHaveBeenCalled();
+    await notifyWebPushForActivity(activity("DELIVERED"));
+    expect(sendPushToUser).not.toHaveBeenCalled();
   });
 
   it("senza contentId: manda comunque il testo, senza link", async () => {
-    await notifyTelegramForActivity(activity("COMMENT", { contentId: null }));
+    await notifyWebPushForActivity(activity("COMMENT", { contentId: null }));
     expect(content.findFirst).not.toHaveBeenCalled();
-    const [, text] = sendMessage.mock.calls[0];
-    expect(text).not.toContain("/contenuti/");
+    const [, payload] = sendPushToUser.mock.calls[0];
+    expect(payload.body).not.toContain("/contenuti/");
+    expect(payload.url).toBeUndefined();
   });
 
   it("con NEXT_PUBLIC_APP_URL usa un URL assoluto", async () => {
     const prev = process.env.NEXT_PUBLIC_APP_URL;
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com/";
-    await notifyTelegramForActivity(activity("DELIVERED"));
-    const [, text] = sendMessage.mock.calls[0];
-    expect(text).toContain("https://app.example.com/contenuti/c1");
+    await notifyWebPushForActivity(activity("DELIVERED"));
+    const [, payload] = sendPushToUser.mock.calls[0];
+    expect(payload.body).toContain("https://app.example.com/contenuti/c1");
     if (prev === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
     else process.env.NEXT_PUBLIC_APP_URL = prev;
   });
 
   it("non lancia mai: se il lookup destinatari fallisce resta best-effort", async () => {
     membership.findMany.mockRejectedValue(new Error("db down"));
-    await expect(notifyTelegramForActivity(activity("DELIVERED"))).resolves.toBeUndefined();
-    expect(sendMessage).not.toHaveBeenCalled();
+    await expect(notifyWebPushForActivity(activity("DELIVERED"))).resolves.toBeUndefined();
+    expect(sendPushToUser).not.toHaveBeenCalled();
   });
 
-  it("multi-destinatario: invia a ciascun membro con chat", async () => {
+  it("multi-destinatario: invia a ciascun membro", async () => {
     membership.findMany.mockResolvedValue([{ userId: "matteo" }, { userId: "sara" }]);
-    await notifyTelegramForActivity(activity("DELIVERED"));
-    expect(sendMessage).toHaveBeenCalledTimes(2);
+    await notifyWebPushForActivity(activity("DELIVERED"));
+    expect(sendPushToUser).toHaveBeenCalledTimes(2);
   });
 });
