@@ -23,6 +23,10 @@ const mono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Luca — Gestione contenuti",
   description: "Pianificazione, pubblicazione e KPI dei contenuti.",
+  // Apple-touch-icon per la Home Screen iOS (fondo pieno, no trasparenza).
+  icons: {
+    apple: "/apple-icon-180.png",
+  },
   // iOS: abilita la modalità standalone quando aggiunta alla Home Screen.
   appleWebApp: {
     capable: true,
