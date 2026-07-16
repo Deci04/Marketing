@@ -1,7 +1,8 @@
 export type WorkflowState = "Da fare" | "Da revisionare" | "Confermato";
 
 /** Ciclo di collaborazione basato su eventi reali:
- *  Matteo crea e carica il contenuto → Luca lo revisiona/conferma. */
+ *  Matteo crea e carica il contenuto → Luca lo revisiona/conferma.
+ *  NB: usato da content-card.tsx e content-modal.tsx — non toccare firma/comportamento. */
 export function workflowState(c: {
   confirmedAt: Date | null;
   hasMontato: boolean;
@@ -9,6 +10,26 @@ export function workflowState(c: {
   if (c.confirmedAt) return "Confermato";
   if (c.hasMontato) return "Da revisionare";
   return "Da fare";
+}
+
+/** Nuova macchina a stati (home "Da fare adesso"): distingue esplicitamente
+ *  "Luca ha consegnato il materiale grezzo" (`deliveredAt`) da "Matteo ha
+ *  caricato un montato" (`hasMontato`), cosa che `workflowState` non fa. */
+export type ContentStage =
+  | "DaConsegnare"
+  | "InProduzione"
+  | "DaRevisionare"
+  | "Confermato";
+
+export function contentStage(c: {
+  deliveredAt: Date | null;
+  confirmedAt: Date | null;
+  hasMontato: boolean;
+}): ContentStage {
+  if (c.confirmedAt) return "Confermato";
+  if (c.hasMontato) return "DaRevisionare";
+  if (c.deliveredAt) return "InProduzione";
+  return "DaConsegnare";
 }
 
 const DAY_MS = 86_400_000;
@@ -31,16 +52,20 @@ export type HomeContent = {
   format: string | null;
   confirmedAt: Date | null;
   hasMontato: boolean;
-  block: { lucaDeliveryAt: Date | null } | null;
+  deliveredAt: Date | null;
+  block: { id: string; label: string; lucaDeliveryAt: Date | null } | null;
 };
 
-export type DeadlineGroup = {
-  daysUntil: number;
+export type BlockGroup = {
+  blockId: string;
+  label: string;
   count: number;
   noun: string;
   /** Formato omogeneo del gruppo (chiave), o null se misto/sconosciuto.
    *  Serve a costruire il singolare corretto quando `count === 1`. */
   format: string | null;
+  daysUntil: number;
+  deadline: Date;
   contentIds: string[];
 };
 
@@ -60,36 +85,36 @@ const FORMAT_SINGULAR: Record<string, string> = {
   LONG_VIDEO: "Video",
 };
 
-/** Formati di genere femminile (articolo "la prossima" invece di "il prossimo"). */
-const FEMININE_FORMATS = new Set<string>(["STORY"]);
-
 /** Finestra (giorni-calendario UTC) entro cui una scadenza è considerata
  *  "imminente" e quindi mostrata nella home. Le scadenze in ritardo (d < 0)
  *  sono sempre incluse; quelle oltre la settimana corrente sono contesto,
  *  non azione, e vengono scartate. */
 const DEADLINE_WINDOW_DAYS = 7;
 
-/** Raggruppa i contenuti ancora "Da consegnare" per la scadenza di Luca
- *  (`block.lucaDeliveryAt`), tenendo solo le scadenze della settimana
- *  imminente (quelle in ritardo incluse). Ordinati dal più urgente al meno urgente. */
-export function lucaDeadlineGroups(
-  contents: HomeContent[],
-  now: Date
-): DeadlineGroup[] {
-  const buckets = new Map<number, HomeContent[]>();
+/** Raggruppa i contenuti ancora "DaConsegnare" per BLOCCO (`block.id`), tenendo
+ *  solo i blocchi la cui scadenza (`block.lucaDeliveryAt`) è nella settimana
+ *  imminente (quelle in ritardo incluse). Ordinati dal più urgente al meno
+ *  urgente. Ogni blocco produce al più un gruppo, mai un gruppo per giorno:
+ *  questo evita righe ripetute come "consegna i prossimi 3/2/4 Reel". */
+export function lucaBlockGroups(contents: HomeContent[], now: Date): BlockGroup[] {
+  const buckets = new Map<
+    string,
+    { label: string; lucaDeliveryAt: Date; items: HomeContent[] }
+  >();
   for (const c of contents) {
-    if (workflowState(c) !== "Da fare") continue;
-    const dl = c.block?.lucaDeliveryAt;
-    if (!dl) continue;
+    if (contentStage(c) !== "DaConsegnare") continue;
+    const block = c.block;
+    const dl = block?.lucaDeliveryAt;
+    if (!block || !dl) continue;
     const d = daysUntil(dl, now);
     if (d > DEADLINE_WINDOW_DAYS) continue; // solo scadenze imminenti (≤ 1 settimana)
-    const bucket = buckets.get(d);
-    if (bucket) bucket.push(c);
-    else buckets.set(d, [c]);
+    const bucket = buckets.get(block.id);
+    if (bucket) bucket.items.push(c);
+    else buckets.set(block.id, { label: block.label, lucaDeliveryAt: dl, items: [c] });
   }
 
   return [...buckets.entries()]
-    .map(([d, items]) => {
+    .map(([blockId, { label, lucaDeliveryAt, items }]) => {
       const formats = new Set(items.map((i) => i.format));
       const first = items[0].format ?? "";
       const homogeneous = formats.size === 1 ? first : null;
@@ -98,10 +123,13 @@ export function lucaDeadlineGroups(
           ? FORMAT_PLURAL[homogeneous]
           : "contenuti";
       return {
-        daysUntil: d,
+        blockId,
+        label,
         count: items.length,
         noun,
         format: homogeneous,
+        daysUntil: daysUntil(lucaDeliveryAt, now),
+        deadline: lucaDeliveryAt,
         contentIds: items.map((i) => i.id),
       };
     })
@@ -116,60 +144,63 @@ export type HomeAction = {
   text: string;
   urgency: number; // minore = più urgente
   contentIds: string[];
+  /** Presente solo per le righe di consegna di Luca: alimenta la CTA "Ho consegnato". */
+  blockId?: string;
 };
 
-/** Testo imperativo per una deadline aggregata di Luca. */
-function deadlineText(g: DeadlineGroup): string {
-  // Frase al singolare naturale quando c'è un solo contenuto, con articolo
-  // concordato per genere (Reel/Video/Carosello → "il prossimo"; Storia → "la prossima").
-  if (g.count === 1) {
-    const singular = (g.format && FORMAT_SINGULAR[g.format]) || "contenuto";
-    const article =
-      g.format && FEMININE_FORMATS.has(g.format) ? "la prossima" : "il prossimo";
-    const what = `${article} ${singular}`;
-    if (g.daysUntil < 0) return `Sei in ritardo: consegna ${what}`;
-    if (g.daysUntil === 0) return `Consegna oggi ${what}`;
-    if (g.daysUntil === 1) return `Hai 1 giorno per consegnare ${what}`;
-    return `Hai ${g.daysUntil} giorni per consegnare ${what}`;
-  }
+const ITALIAN_SHORT_DATE = new Intl.DateTimeFormat("it-IT", {
+  day: "numeric",
+  month: "short",
+});
 
-  const what = `i prossimi ${g.count} ${g.noun}`;
-  if (g.daysUntil < 0) return `Sei in ritardo: consegna ${what}`;
-  if (g.daysUntil === 0) return `Consegna oggi ${what}`;
-  if (g.daysUntil === 1) return `Hai 1 giorno per consegnare ${what}`;
-  return `Hai ${g.daysUntil} giorni per consegnare ${what}`;
+/** Testo neutro (nessun "Sei in ritardo") per un blocco da consegnare. */
+function blockDeadlineText(g: BlockGroup): string {
+  const noun =
+    g.count === 1
+      ? (g.format && FORMAT_SINGULAR[g.format]) || "contenuto"
+      : (g.format && FORMAT_PLURAL[g.format]) || g.noun;
+  const dateStr = ITALIAN_SHORT_DATE.format(g.deadline);
+  const what = `${g.count} ${noun} da consegnare`;
+  return g.daysUntil < 0
+    ? `Blocco «${g.label}»: ${what} (scaduto il ${dateStr})`
+    : `Blocco «${g.label}»: ${what} entro ${dateStr}`;
 }
 
-/** Azioni della home ordinate per urgenza, per ruolo. Solo azioni non vuote. */
+/** Azioni della home ordinate per urgenza, per ruolo. Solo azioni non vuote,
+ *  al più 2 (rumore zero). */
 export function homeActions(
   contents: HomeContent[],
   role: HomeRole,
   now: Date
 ): HomeAction[] {
   if (role === "matteo") {
-    const toDo = contents.filter((c) => workflowState(c) === "Da fare");
-    if (!toDo.length) return [];
+    // "Da montare" = Luca ha già consegnato il grezzo, Matteo non ha ancora
+    // caricato un montato (InProduzione) — non "DaConsegnare", che è ancora
+    // in mano a Luca.
+    const toMount = contents.filter((c) => contentStage(c) === "InProduzione");
+    if (!toMount.length) return [];
     return [
       {
         key: "todo",
         emoji: "🎬",
-        text: `${toDo.length} ${toDo.length === 1 ? "contenuto" : "contenuti"} da montare`,
+        text: `${toMount.length} ${toMount.length === 1 ? "contenuto" : "contenuti"} da montare`,
         urgency: 50,
-        contentIds: toDo.map((c) => c.id),
+        contentIds: toMount.map((c) => c.id),
       },
-    ];
+    ].slice(0, 2);
   }
 
-  // Luca
-  const actions: HomeAction[] = lucaDeadlineGroups(contents, now).map((g) => ({
-    key: `deadline-${g.daysUntil}`,
+  // Luca: un item per blocco (tono neutro), poi la revisione.
+  const actions: HomeAction[] = lucaBlockGroups(contents, now).map((g) => ({
+    key: `block-${g.blockId}`,
     emoji: "⏳",
-    text: deadlineText(g),
-    urgency: g.daysUntil, // più vicino = più urgente
+    text: blockDeadlineText(g),
+    urgency: g.daysUntil, // più vicino (o più in ritardo) = più urgente
     contentIds: g.contentIds,
+    blockId: g.blockId,
   }));
 
-  const toReview = contents.filter((c) => workflowState(c) === "Da revisionare");
+  const toReview = contents.filter((c) => contentStage(c) === "DaRevisionare");
   if (toReview.length) {
     actions.push({
       key: "review",
@@ -180,5 +211,5 @@ export function homeActions(
     });
   }
 
-  return actions.sort((a, b) => a.urgency - b.urgency);
+  return actions.sort((a, b) => a.urgency - b.urgency).slice(0, 2);
 }
