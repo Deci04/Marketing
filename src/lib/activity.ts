@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
 import { chatIdForUser } from "@/lib/telegram-link";
 import { sendMessage } from "@/lib/telegram";
+import { isPushConfigured, sendPushToUser } from "@/lib/web-push";
 import type { ActivityType } from "@prisma/client";
 
 export async function createActivity(
@@ -18,6 +19,8 @@ export async function createActivity(
   });
   // Hook notifiche esterne — acceso dal filone N. No-op finché non implementato.
   await notifyTelegramForActivity(activity).catch(() => {});
+  // Push notifiche browser/device (PWA parte B). No-op se VAPID non è configurata.
+  await notifyWebPushForActivity(activity).catch(() => {});
   return activity;
 }
 
@@ -127,6 +130,87 @@ export async function notifyTelegramForActivity(activity: {
         if (!chatId) return; // destinatario senza Telegram → no-op naturale
         await sendMessage(chatId, text).catch(() => {});
       })
+    );
+  } catch {
+    // Notifica interamente best-effort: non deve mai far fallire createActivity.
+  }
+}
+
+/** Titolo breve per la notifica push (il corpo lo fa già composeText). */
+function shortTitleFor(type: ActivityType): string {
+  switch (type) {
+    case "DELIVERED":
+      return "Materiale consegnato";
+    case "REVIEW_READY":
+      return "Montato da confermare";
+    case "CONFIRMED":
+      return "Contenuto confermato";
+    case "COMMENT":
+      return "Nuovo commento";
+    default:
+      return "Gestione contenuti";
+  }
+}
+
+/**
+ * Filone PWA-B: dopo ogni createActivity, notifica via push (device/browser) i
+ * membri del workspace diversi dall'actor. Stessa logica destinatari/testo del
+ * filone N (Telegram). Best-effort e no-op totale se VAPID non è configurata.
+ */
+export async function notifyWebPushForActivity(activity: {
+  workspaceId: string;
+  type: ActivityType;
+  contentId: string | null;
+  actorId: string | null;
+}): Promise<void> {
+  if (!isPushConfigured()) return;
+  try {
+    if (!PUSH_TYPES.has(activity.type)) return;
+
+    // Destinatari: membri del workspace diversi dall'actor.
+    const memberships = await db.membership.findMany({
+      where: scopedWhere(
+        activity.workspaceId,
+        activity.actorId ? { userId: { not: activity.actorId } } : {}
+      ),
+      select: { userId: true },
+    });
+    if (memberships.length === 0) return;
+
+    // Arricchimenti opzionali: nome dell'actor e titolo del contenuto.
+    const [actor, content] = await Promise.all([
+      activity.actorId
+        ? db.user
+            .findUnique({
+              where: { id: activity.actorId },
+              select: { name: true, email: true },
+            })
+            .catch(() => null)
+        : Promise.resolve(null),
+      activity.contentId
+        ? db.content
+            .findFirst({
+              where: scopedWhere(activity.workspaceId, { id: activity.contentId }),
+              select: { title: true },
+            })
+            .catch(() => null)
+        : Promise.resolve(null),
+    ]);
+
+    const actorName = actor?.name ?? actor?.email ?? null;
+    const title = content?.title ?? null;
+    const link = contentLink(activity.contentId);
+    const body = composeText(activity.type, actorName, title, link);
+    const pushTitle = shortTitleFor(activity.type);
+
+    await Promise.all(
+      memberships.map((m) =>
+        sendPushToUser(m.userId, {
+          title: pushTitle,
+          body,
+          url: link ?? undefined,
+        }).catch(() => {})
+      )
     );
   } catch {
     // Notifica interamente best-effort: non deve mai far fallire createActivity.
