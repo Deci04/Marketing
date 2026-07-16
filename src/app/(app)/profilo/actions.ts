@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { Role } from "@prisma/client";
 import { db } from "@/lib/db";
 import { currentUser, currentContext } from "@/lib/current";
-import { setTelegramLinkCode } from "@/lib/telegram-link";
 import { disconnectAccount } from "@/lib/zernio";
 import { stopWatch, GOOGLE_PROVIDER } from "@/lib/google-calendar";
 
@@ -49,15 +48,6 @@ export async function createWorkspaceAction(formData: FormData) {
   await db.membership.create({
     data: { userId: admin.id, workspaceId: ws.id, role: Role.ADMIN },
   });
-  revalidatePath("/profilo");
-}
-
-/** Genera un codice di collegamento Telegram per l'utente corrente.
- *  Non richiede admin: Luca è collaborator e collega il proprio account. */
-export async function generateTelegramLinkCodeAction() {
-  const u = await currentUser();
-  if (!u) throw new Error("Non autorizzato");
-  await setTelegramLinkCode(u.id);
   revalidatePath("/profilo");
 }
 

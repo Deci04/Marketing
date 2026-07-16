@@ -7,11 +7,10 @@ const ws = { id: `ws_diary_${Date.now()}`, name: "diarytest" };
 describe("diary data layer", () => {
   it("crea e cerca voci di diario, scoping al workspace", async () => {
     await db.workspace.create({ data: ws });
-    await createDiaryEntry(ws.id, { rawText: "girato reel in spiaggia", telegramFileType: null });
+    await createDiaryEntry(ws.id, { rawText: "girato reel in spiaggia" });
     await createDiaryEntry(ws.id, {
       caption: "tramonto",
-      telegramFileId: "AgAC1",
-      telegramFileType: "photo",
+      mediaType: "photo",
       aiDescription: "una spiaggia al tramonto con onde",
     });
 

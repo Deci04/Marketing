@@ -137,7 +137,7 @@ export function readOnlyTools(workspaceId: string) {
 
     searchDiary: tool({
       description:
-        "Cerca nel DIARIO di Luca: note, foto e video inviati via Telegram (testo, didascalia, e descrizione AI delle foto). Usalo per proporre spunti/contenuti basati su ciò che Luca ha realmente girato.",
+        "Cerca nel DIARIO di Luca: note, foto e video raccolti in-app (testo, didascalia, e descrizione AI delle foto). Usalo per proporre spunti/contenuti basati su ciò che Luca ha realmente girato.",
       inputSchema: z.object({
         query: z
           .string()
@@ -153,7 +153,7 @@ export function readOnlyTools(workspaceId: string) {
           text: e.rawText ?? e.caption ?? null,
           aiTitle: e.aiTitle ?? null,
           aiDescription: e.aiDescription ?? null,
-          mediaType: e.telegramFileType ?? null,
+          mediaType: e.mediaType ?? null,
         }));
       },
     }),

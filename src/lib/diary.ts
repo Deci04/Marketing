@@ -6,8 +6,6 @@ export type DiaryEntryInput = {
   authorUserId?: string | null;
   rawText?: string | null;
   caption?: string | null;
-  telegramFileId?: string | null;
-  telegramFileType?: string | null; // "photo" | "video" | "document" (legacy Telegram)
   aiTitle?: string | null;
   aiDescription?: string | null;
   // C1 — media su Cloudflare R2 (nuovo canale di ingestion in-app).
@@ -30,8 +28,6 @@ export async function createDiaryEntry(
       authorUserId: data.authorUserId ?? null,
       rawText: data.rawText ?? null,
       caption: data.caption ?? null,
-      telegramFileId: data.telegramFileId ?? null,
-      telegramFileType: data.telegramFileType ?? null,
       aiTitle: data.aiTitle ?? null,
       aiDescription: data.aiDescription ?? null,
       r2Key: data.r2Key ?? null,
