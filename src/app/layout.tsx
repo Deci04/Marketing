@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
@@ -23,6 +23,21 @@ const mono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Luca — Gestione contenuti",
   description: "Pianificazione, pubblicazione e KPI dei contenuti.",
+  // iOS: abilita la modalità standalone quando aggiunta alla Home Screen.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Contenuti",
+  },
+};
+
+// Theme-color della chrome del browser in standalone + safe-area iPhone (notch).
+// App a tema solo chiaro → un'unica tinta chiara (paper).
+export const viewport: Viewport = {
+  themeColor: "#fffdf8",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

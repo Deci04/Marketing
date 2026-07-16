@@ -23,6 +23,9 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api/auth|login|_next/static|_next/image|favicon.ico).*)",
+    // Esclusi anche gli asset PWA (manifest/service worker/icone): a sessione
+    // scaduta NON devono ricevere il redirect HTML a /login, altrimenti il
+    // browser rifiuta l'update del service worker e può marcarlo come rotto.
+    "/((?!api/auth|login|_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icon-|apple-icon).*)",
   ],
 };
