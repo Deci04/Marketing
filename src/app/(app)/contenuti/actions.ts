@@ -103,9 +103,17 @@ export async function markBlockDeliveredAction(formData: FormData) {
   if (!ctx) return;
   const blockId = String(formData.get("blockId") ?? "").trim();
   if (!blockId) return;
-  // tutti i content del blocco ancora "da consegnare" (deliveredAt == null)
+  // Solo i content del blocco davvero "da consegnare" (stage DaConsegnare):
+  // non ancora consegnati, non confermati e non montati — così "Ho consegnato"
+  // non tocca un montato già in revisione (niente attività/push spurie).
   const rows = await db.content.findMany({
-    where: scopedWhere(ctx.workspaceId, { blockId, deliveredAt: null }),
+    where: scopedWhere(ctx.workspaceId, {
+      blockId,
+      deliveredAt: null,
+      confirmedAt: null,
+      videoProxyUrl: null,
+      materials: { none: {} },
+    }),
     select: { id: true },
   });
   for (const r of rows) {
