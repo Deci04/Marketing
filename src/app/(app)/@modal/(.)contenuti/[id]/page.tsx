@@ -38,6 +38,7 @@ export default async function ContentModalPage({
     }),
     statusOverride: c.statusOverride ?? null,
     hook: c.hook,
+    notes: c.notes,
     publishAt: c.publishAt ? c.publishAt.toISOString() : null,
     publishAtInput: c.publishAt ? c.publishAt.toISOString().slice(0, 10) : null,
     thumbnailUrl: c.thumbnailUrl,

@@ -56,7 +56,7 @@ export async function createContentAction(formData: FormData) {
   const format = parseFormat(String(formData.get("format") ?? ""));
   const publishRaw = String(formData.get("publishAt") ?? "");
   const blockId = String(formData.get("blockId") ?? "") || null;
-  const hook = String(formData.get("hook") ?? "") || null;
+  const notes = String(formData.get("notes") ?? "") || null;
   const classIds = formData.getAll("classIds").map(String).filter(Boolean);
   const created = await createContent(ctx.workspaceId, {
     title,
@@ -64,7 +64,7 @@ export async function createContentAction(formData: FormData) {
     format,
     publishAt: publishRaw ? new Date(publishRaw) : null,
     blockId,
-    hook,
+    notes,
     classIds,
   });
   await createActivity(ctx.workspaceId, {
