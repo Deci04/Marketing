@@ -50,7 +50,7 @@ export type ModalContent = {
   channel: "INSTAGRAM" | "YOUTUBE";
   status: string;
   statusOverride: string | null;
-  hook: string | null;
+  notes: string | null;
   publishAt: string | null;
   publishAtInput: string | null;
   thumbnailUrl: string | null;
@@ -527,10 +527,10 @@ export function ContentModal({
 
                       {detailsOpen && (
                         <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border pt-3 sm:grid-cols-2">
-                          {content.hook && (
+                          {content.notes && (
                             <div className="sm:col-span-2">
-                              <div className="text-xs text-muted-foreground">Hook</div>
-                              <p className="mt-0.5 text-[15px] text-ink">&ldquo;{content.hook}&rdquo;</p>
+                              <div className="text-xs text-muted-foreground">Note</div>
+                              <p className="mt-0.5 whitespace-pre-wrap text-[15px] text-ink">{content.notes}</p>
                             </div>
                           )}
                           <div>
@@ -584,10 +584,10 @@ export function ContentModal({
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-muted-foreground">Hook</label>
+                        <label className="text-xs text-muted-foreground">Note</label>
                         <textarea
-                          name="hook"
-                          defaultValue={content.hook ?? ""}
+                          name="notes"
+                          defaultValue={content.notes ?? ""}
                           rows={2}
                           className="mt-1 w-full rounded-[12px] border border-border bg-secondary/70 px-3.5 py-2.5 text-sm outline-none focus:border-ink/30 focus:bg-paper"
                         />

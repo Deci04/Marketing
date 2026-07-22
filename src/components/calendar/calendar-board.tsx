@@ -20,7 +20,12 @@ import {
   setBlockDeliveryAction,
   createBlockRangeAction,
   resizeBlockAction,
+  updateEventNotesAction,
+  updateBlockNotesAction,
+  setBlockContentsAction,
 } from "@/app/(app)/calendario/actions";
+import { updateContentFieldsAction } from "@/app/(app)/contenuti/actions";
+import { blockCandidateContents } from "@/lib/block-select";
 import { FORMAT_ORDER, FORMAT_LABELS } from "@/lib/format";
 import { nextTitleForFormat } from "@/lib/content-title";
 
@@ -34,8 +39,11 @@ type ItemDTO = {
   owner: "Luca" | "Matteo" | null;
   channel: "INSTAGRAM" | "YOUTUBE" | null;
   href: string | null;
+  title?: string;
+  notes?: string | null;
 };
-type BandBlock = { id: string; label: string; start: string; end: string };
+type BandBlock = { id: string; label: string; start: string; end: string; notes: string | null };
+type ContentDTO = { id: string; title: string; publishAt: string | null; blockId: string | null };
 
 function chipTone(it: ItemDTO) {
   if (it.refType === "luca") return "bg-blush text-blush-ink";
@@ -69,8 +77,9 @@ export function CalendarBoard({
   monthLabel,
   year,
   weeks,
-  items,
-  blocks,
+  items: initialItems,
+  blocks: initialBlocks,
+  contents = [],
   defaultResponsible = null,
   contentTitles = [],
   prevHref,
@@ -81,6 +90,7 @@ export function CalendarBoard({
   weeks: Cell[][];
   items: ItemDTO[];
   blocks: BandBlock[];
+  contents?: ContentDTO[];
   defaultResponsible?: "LUCA" | "MATTEO" | null;
   contentTitles?: string[];
   prevHref: string;
@@ -91,6 +101,65 @@ export function CalendarBoard({
   const [showBlock, setShowBlock] = useState(false);
   const [selected, setSelected] = useState<ItemDTO | null>(null);
   const [inlineDay, setInlineDay] = useState<string | null>(null);
+  const [editBlock, setEditBlock] = useState<{ id: string; label: string; start: string; end: string } | null>(null);
+  // Checklist of contents falling in the block's period, default-checked; the
+  // user can deselect. Recomputed (during render, not an effect) whenever a
+  // different block dialog opens — `checkedForBlock` tracks which block the
+  // current `checkedIds` snapshot belongs to.
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [checkedForBlock, setCheckedForBlock] = useState<string | null>(null);
+  const blockContents = editBlock ? blockCandidateContents(contents, editBlock) : [];
+  if (editBlock && checkedForBlock !== editBlock.id) {
+    setCheckedForBlock(editBlock.id);
+    setCheckedIds(new Set(blockContents.map((c) => c.id)));
+  }
+  const closeEditBlock = () => {
+    setEditBlock(null);
+    setCheckedForBlock(null);
+  };
+  const toggleContentChecked = (id: string) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const saveBlockContents = async () => {
+    if (!editBlock) return;
+    const fd = new FormData();
+    fd.set("blockId", editBlock.id);
+    for (const id of checkedIds) fd.append("contentIds", id);
+    const ok = await setBlockContentsAction(fd);
+    if (ok) {
+      toast.success("Blocco aggiornato");
+      closeEditBlock();
+      router.refresh();
+    } else {
+      toast.error("Non salvato, riprova");
+    }
+  };
+  // Local item state so the drawer's quick-edit (title/notes) can update the
+  // chip optimistically without a blocking `router.refresh()`. Resynced when
+  // the server-provided items change (navigation, revalidate) — adjusted
+  // during render rather than in an effect (avoids an extra render pass).
+  const [items, setItems] = useState(initialItems);
+  const [syncedItems, setSyncedItems] = useState(initialItems);
+  if (initialItems !== syncedItems) {
+    setSyncedItems(initialItems);
+    setItems(initialItems);
+  }
+
+  // Local block state so the block-notes onBlur save can update the note
+  // in place (reopening the same block in the same session shouldn't show a
+  // stale value). Resynced when the server-provided blocks change, same
+  // pattern as `items`/`syncedItems` above.
+  const [blocks, setBlocks] = useState(initialBlocks);
+  const [syncedBlocks, setSyncedBlocks] = useState(initialBlocks);
+  if (initialBlocks !== syncedBlocks) {
+    setSyncedBlocks(initialBlocks);
+    setBlocks(initialBlocks);
+  }
 
   const byDay = new Map<string, ItemDTO[]>();
   for (const it of items) {
@@ -120,6 +189,59 @@ export function CalendarBoard({
     await deleteItemAction(it.refType, it.refId);
     toast.success("Evento rimosso");
     router.refresh();
+  };
+
+  // Drawer quick-edit (title/notes): local, discreet save status — no toast
+  // per keystroke/blur, just a small "Salvato ✓" / "Errore, riprova" hint.
+  // Reset when a different item is selected (adjusted during render, not an effect).
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const selectedKey = selected ? `${selected.refType}:${selected.refId}` : null;
+  const [statusKey, setStatusKey] = useState<string | null>(selectedKey);
+  if (selectedKey !== statusKey) {
+    setStatusKey(selectedKey);
+    setStatus("idle");
+  }
+
+  const saveContentField = async (field: "title" | "notes", value: string) => {
+    if (!selected) return;
+    const { refId, refType } = selected;
+    const fd = new FormData();
+    fd.set("id", refId);
+    fd.set(field, value);
+    setStatus("saving");
+    const ok = await updateContentFieldsAction(fd);
+    if (ok) {
+      setSelected((s) => (s ? { ...s, [field]: value, label: field === "title" ? value : s.label } : s));
+      setItems((list) =>
+        list.map((i) =>
+          i.refId === refId && i.refType === refType
+            ? { ...i, [field]: value, label: field === "title" ? value : i.label }
+            : i
+        )
+      );
+      setStatus("saved");
+    } else {
+      setStatus("error");
+    }
+  };
+
+  const saveEventNotes = async (value: string) => {
+    if (!selected) return;
+    const { refId, refType } = selected;
+    const fd = new FormData();
+    fd.set("id", refId);
+    fd.set("notes", value);
+    setStatus("saving");
+    const ok = await updateEventNotesAction(fd);
+    if (ok) {
+      setSelected((s) => (s ? { ...s, notes: value } : s));
+      setItems((list) =>
+        list.map((i) => (i.refId === refId && i.refType === refType ? { ...i, notes: value } : i))
+      );
+      setStatus("saved");
+    } else {
+      setStatus("error");
+    }
   };
 
   const DOW = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
@@ -256,11 +378,16 @@ export function CalendarBoard({
                     <div
                       key={seg.id}
                       style={{ gridColumn: `${seg.startCol + 1} / ${seg.endCol + 2}` }}
-                      className="relative truncate rounded-md border border-border bg-secondary px-3 py-0.5 text-[11px] font-medium text-ink/70"
+                      onClick={() => {
+                        const band = blocks.find((b) => b.id === seg.id);
+                        if (band) setEditBlock({ id: band.id, label: band.label, start: band.start, end: band.end });
+                      }}
+                      className="relative cursor-pointer truncate rounded-md border border-border bg-secondary px-3 py-0.5 text-[11px] font-medium text-ink/70 hover:bg-secondary/70"
                     >
                       {seg.startsHere && (
                         <span
                           draggable
+                          onClick={(e) => e.stopPropagation()}
                           onDragStart={(e) => {
                             e.stopPropagation();
                             e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "resize", id: seg.id, edge: "start" }));
@@ -275,6 +402,7 @@ export function CalendarBoard({
                       {seg.endsHere && (
                         <span
                           draggable
+                          onClick={(e) => e.stopPropagation()}
                           onDragStart={(e) => {
                             e.stopPropagation();
                             e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "resize", id: seg.id, edge: "end" }));
@@ -425,6 +553,81 @@ export function CalendarBoard({
         </Dialog>
       )}
 
+      {editBlock &&
+        (() => {
+          const bandNotes = blocks.find((b) => b.id === editBlock.id)?.notes ?? null;
+          return (
+            <Dialog onClose={closeEditBlock} title={`Blocco · ${editBlock.label}`}>
+              <div className="space-y-4">
+                <Field label="Note per Luca">
+                  <textarea
+                    key={`block-notes-${editBlock.id}`}
+                    defaultValue={bandNotes ?? ""}
+                    rows={3}
+                    placeholder="Cosa consegnare a Luca…"
+                    onBlur={async (e) => {
+                      const blockId = editBlock.id;
+                      const fd = new FormData();
+                      fd.set("id", blockId);
+                      fd.set("notes", e.target.value);
+                      const ok = await updateBlockNotesAction(fd);
+                      if (ok) {
+                        const notes = e.target.value.trim() || null;
+                        setBlocks((prev) =>
+                          prev.map((b) => (b.id === blockId ? { ...b, notes } : b))
+                        );
+                      }
+                    }}
+                    className={`w-full resize-none ${inputCls}`}
+                  />
+                </Field>
+
+                <div>
+                  <span className="mb-1.5 block text-xs text-muted-foreground">
+                    Contenuti nel periodo
+                  </span>
+                  {blockContents.length === 0 ? (
+                    <p className="text-xs text-muted-foreground/70">Nessun contenuto in questo periodo.</p>
+                  ) : (
+                    <ul className="max-h-64 space-y-1 overflow-y-auto">
+                      {blockContents.map((c) => (
+                        <li key={c.id}>
+                          <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-secondary/70">
+                            <input
+                              type="checkbox"
+                              checked={checkedIds.has(c.id)}
+                              onChange={() => toggleContentChecked(c.id)}
+                              className="h-4 w-4 shrink-0 rounded border-border"
+                            />
+                            <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={saveBlockContents}
+                    className="rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
+                  >
+                    Salva
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeEditBlock}
+                    className="rounded-full border border-border px-4 py-2.5 text-sm text-muted-foreground hover:bg-secondary"
+                  >
+                    Annulla
+                  </button>
+                </div>
+              </div>
+            </Dialog>
+          );
+        })()}
+
       <AnimatePresence>
         {selected &&
           (() => {
@@ -463,7 +666,20 @@ export function CalendarBoard({
                     </button>
                   </div>
 
-                  <h3 className="mt-3 font-heading text-xl text-ink">{cleanTitle(selected)}</h3>
+                  {selected.refType === "publication" ? (
+                    <input
+                      key={`title-${selected.refId}`}
+                      defaultValue={selected.title ?? cleanTitle(selected)}
+                      placeholder="Nome"
+                      onBlur={(e) => saveContentField("title", e.target.value.trim())}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+                      }}
+                      className={`mt-3 font-heading text-lg ${inputCls}`}
+                    />
+                  ) : (
+                    <h3 className="mt-3 font-heading text-xl text-ink">{cleanTitle(selected)}</h3>
+                  )}
 
                   <dl className="mt-4 space-y-3 text-sm">
                     <div>
@@ -483,7 +699,36 @@ export function CalendarBoard({
                         <dd className="mt-0.5 text-ink">{meta.who}</dd>
                       </div>
                     )}
+                    {(selected.refType === "publication" || selected.refType === "event") && (
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Note</dt>
+                        <dd className="mt-1">
+                          <textarea
+                            key={`notes-${selected.refId}`}
+                            defaultValue={selected.notes ?? ""}
+                            rows={3}
+                            placeholder="Aggiungi una nota…"
+                            onBlur={(e) =>
+                              selected.refType === "publication"
+                                ? saveContentField("notes", e.target.value)
+                                : saveEventNotes(e.target.value)
+                            }
+                            className={`w-full resize-none ${inputCls}`}
+                          />
+                        </dd>
+                      </div>
+                    )}
                   </dl>
+
+                  {status !== "idle" && (
+                    <p
+                      className={`mt-2 text-xs transition-opacity ${
+                        status === "error" ? "text-coral-ink" : "text-muted-foreground"
+                      }`}
+                    >
+                      {status === "saving" ? "Salvataggio…" : status === "saved" ? "Salvato ✓" : "Errore, riprova"}
+                    </p>
+                  )}
 
                   <div className="mt-auto flex gap-2 pt-5">
                     {selected.href && (

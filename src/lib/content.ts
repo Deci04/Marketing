@@ -298,12 +298,33 @@ export function toArchiveRows(contents: RowSource[]): ArchiveRowData[] {
   });
 }
 
+/** Build a partial update patch from FormData, including only the keys that
+ *  are actually present (fd.has(key)) — used by quick inline-edit actions.
+ *  title: trimmed if present, but included only when non-empty — a content
+ *  must have a name, so an empty/whitespace title is dropped rather than
+ *  clearing the name. notes: trimmed if present; an empty string clears it (null). */
+export function buildContentPatch(
+  fd: FormData
+): { title?: string; notes?: string | null } {
+  const patch: { title?: string; notes?: string | null } = {};
+  if (fd.has("title")) {
+    const title = String(fd.get("title") ?? "").trim();
+    if (title) patch.title = title;
+  }
+  if (fd.has("notes")) {
+    const notes = String(fd.get("notes") ?? "").trim();
+    patch.notes = notes || null;
+  }
+  return patch;
+}
+
 export async function updateContent(
   workspaceId: string,
   id: string,
   data: {
     title?: string;
     hook?: string | null;
+    notes?: string | null;
     publishAt?: Date | null;
     format?: ContentFormat | null;
     // performance metrics (filled after publishing)
@@ -547,4 +568,60 @@ export async function setContentMasterLink(
     where: { id: contentId },
     data: { masterLink: link },
   });
+}
+
+/** Pure diff between a block's current contents and the user's selection.
+ * toAttach = selected not in current; toDetach = current not in selected. */
+export function blockContentsDiff(
+  current: string[],
+  selected: string[]
+): { toAttach: string[]; toDetach: string[] } {
+  const currentSet = new Set(current);
+  const selectedSet = new Set(selected);
+  return {
+    toAttach: selected.filter((id) => !currentSet.has(id)),
+    toDetach: current.filter((id) => !selectedSet.has(id)),
+  };
+}
+
+/** Re-associate contents to a block from a user-picked selection: attaches
+ * newly-selected contents, detaches previously-attached ones the user removed.
+ * Everything is scoped to the workspace. */
+export async function setBlockContents(
+  workspaceId: string,
+  blockId: string,
+  selectedContentIds: string[]
+): Promise<void> {
+  const block = await db.block.findFirst({
+    where: scopedWhere(workspaceId, { id: blockId }),
+    select: { id: true },
+  });
+  if (!block) return;
+
+  const current = await db.content.findMany({
+    where: scopedWhere(workspaceId, { blockId }),
+    select: { id: true },
+  });
+  const currentIds = current.map((c) => c.id);
+
+  const scopedSelected = await db.content.findMany({
+    where: scopedWhere(workspaceId, { id: { in: selectedContentIds } }),
+    select: { id: true },
+  });
+  const scopedSelectedIds = scopedSelected.map((c) => c.id);
+
+  const { toAttach, toDetach } = blockContentsDiff(currentIds, scopedSelectedIds);
+
+  if (toAttach.length > 0) {
+    await db.content.updateMany({
+      where: scopedWhere(workspaceId, { id: { in: toAttach } }),
+      data: { blockId },
+    });
+  }
+  if (toDetach.length > 0) {
+    await db.content.updateMany({
+      where: scopedWhere(workspaceId, { id: { in: toDetach } }),
+      data: { blockId: null },
+    });
+  }
 }

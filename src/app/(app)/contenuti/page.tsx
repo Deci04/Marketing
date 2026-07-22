@@ -201,7 +201,7 @@ export default async function ContenutiPage({
                 </option>
               ))}
             </SelectField>
-            <TextField name="hook" placeholder="Hook / angolo (opz.)" />
+            <TextField name="notes" placeholder="Note (opz.)" />
             <ClassSelect classes={classes} />
             <button className={btnClass}>
               <Plus size={16} weight="bold" />

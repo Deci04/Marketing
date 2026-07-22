@@ -50,6 +50,8 @@ export default async function CalendarioPage({
     owner: it.owner,
     channel: it.channel as "INSTAGRAM" | "YOUTUBE" | null,
     href: it.href,
+    title: it.title,
+    notes: it.notes,
   }));
 
   const bandDtos = blocks.map((b) => ({
@@ -57,6 +59,7 @@ export default async function CalendarioPage({
     label: b.label,
     start: ymd(b.start),
     end: ymd(b.end),
+    notes: b.notes ?? null,
   }));
 
   const prev = month === 0 ? { y: year - 1, m: 11 } : { y: year, m: month - 1 };
@@ -78,6 +81,12 @@ export default async function CalendarioPage({
         weeks={weeks}
         items={itemDtos}
         blocks={bandDtos}
+        contents={allContents.map((c) => ({
+          id: c.id,
+          title: c.title,
+          publishAt: c.publishAt ? ymd(c.publishAt) : null,
+          blockId: c.blockId,
+        }))}
         defaultResponsible={defaultResponsible}
         contentTitles={contentTitles}
         prevHref={`/calendario?y=${prev.y}&m=${prev.m}`}

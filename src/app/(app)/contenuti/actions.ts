@@ -16,6 +16,7 @@ import {
   setContentVideoProxy,
   setContentMasterLink,
   updateContent,
+  buildContentPatch,
   deleteContent,
   deleteComment,
   addMaterial,
@@ -55,7 +56,7 @@ export async function createContentAction(formData: FormData) {
   const format = parseFormat(String(formData.get("format") ?? ""));
   const publishRaw = String(formData.get("publishAt") ?? "");
   const blockId = String(formData.get("blockId") ?? "") || null;
-  const hook = String(formData.get("hook") ?? "") || null;
+  const notes = String(formData.get("notes") ?? "") || null;
   const classIds = formData.getAll("classIds").map(String).filter(Boolean);
   const created = await createContent(ctx.workspaceId, {
     title,
@@ -63,7 +64,7 @@ export async function createContentAction(formData: FormData) {
     format,
     publishAt: publishRaw ? new Date(publishRaw) : null,
     blockId,
-    hook,
+    notes,
     classIds,
   });
   await createActivity(ctx.workspaceId, {
@@ -528,12 +529,12 @@ export async function updateContentAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   const title = String(formData.get("title") ?? "").trim();
-  const hook = String(formData.get("hook") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
   const publishRaw = String(formData.get("publishAt") ?? "").trim();
   const format = parseFormat(String(formData.get("format") ?? ""));
   await updateContent(ctx.workspaceId, id, {
     ...(title ? { title } : {}),
-    hook: hook || null,
+    notes: notes || null,
     publishAt: publishRaw ? new Date(publishRaw) : null,
     format,
   });
@@ -544,6 +545,25 @@ export async function updateContentAction(formData: FormData) {
   }
   revalidatePath("/contenuti");
   revalidatePath(`/contenuti/${id}`);
+}
+
+/** Quick inline-edit: partial patch (title and/or notes) built from whichever
+ *  fields are present in the FormData — used by the calendar's quick-edit UI.
+ *  Returns whether the save actually happened — the drawer's autosave UI needs
+ *  a truthful result, not an optimistic "Salvato" when a silent `!ctx` bail
+ *  happened. */
+export async function updateContentFieldsAction(formData: FormData): Promise<boolean> {
+  const ctx = await currentContext();
+  const id = String(formData.get("id") ?? "");
+  if (!ctx || !id) return false;
+  const patch = buildContentPatch(formData);
+  if (Object.keys(patch).length) {
+    await updateContent(ctx.workspaceId, id, patch);
+  }
+  revalidatePath("/contenuti");
+  revalidatePath(`/contenuti/${id}`);
+  revalidatePath("/calendario");
+  return true;
 }
 
 // --- Content class CRUD + assignment ---

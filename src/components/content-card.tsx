@@ -13,7 +13,7 @@ type CardContent = {
   channel: Channel;
   format?: ContentFormat | null;
   publishAt: Date | null;
-  hook: string | null;
+  notes: string | null;
   thumbnailUrl: string | null;
   statusOverride?: string | null;
   deliveredAt?: Date | null;
@@ -101,9 +101,9 @@ export function ContentCard({ content }: { content: CardContent }) {
             })}
           </p>
         )}
-        {content.hook && (
+        {content.notes && (
           <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-            &ldquo;{content.hook}&rdquo;
+            {content.notes}
           </p>
         )}
         {(fmt || classes.length > 0) && (

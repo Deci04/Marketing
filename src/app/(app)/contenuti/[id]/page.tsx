@@ -126,10 +126,9 @@ export default async function ContentDetailPage({
             })}
           </p>
         )}
-        {content.hook && (
-          <p className="mt-4 rounded-2xl bg-secondary/60 p-4 text-sm">
-            <span className="text-muted-foreground">Hook:</span> &ldquo;
-            {content.hook}&rdquo;
+        {content.notes && (
+          <p className="mt-4 whitespace-pre-wrap rounded-2xl bg-secondary/60 p-4 text-sm">
+            <span className="text-muted-foreground">Note:</span> {content.notes}
           </p>
         )}
         {allClasses.length > 0 && (

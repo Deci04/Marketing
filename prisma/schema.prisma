@@ -162,6 +162,7 @@ model Block {
   id               String          @id @default(cuid())
   workspaceId      String
   label            String
+  notes            String?
   startDate        DateTime?
   endDate          DateTime?
   lucaDeliveryAt   DateTime?
@@ -182,6 +183,7 @@ model CalendarEvent {
   date        DateTime
   title       String
   responsible String? // "LUCA" | "MATTEO" | null
+  notes       String?
   createdAt   DateTime  @default(now())
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   block       Block?    @relation(fields: [blockId], references: [id], onDelete: SetNull)
