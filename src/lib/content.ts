@@ -8,10 +8,34 @@ import { unstable_cache } from "next/cache";
 import { contentsTag } from "@/lib/cache-tags";
 import type { Channel, ContentFormat } from "@prisma/client";
 
+// `unstable_cache` serializes results to JSON, turning Prisma `Date` fields into
+// ISO strings. Consumers of listContents call Date methods (publishAt.getTime(),
+// toISOString(), effectiveStatus comparisons) — so we re-hydrate the known Date
+// fields back to `Date` after retrieval. Keep this list in sync with the Content/
+// Block/ContentClass date columns if new ones are added.
+const CONTENT_DATE_KEYS = ["publishAt", "deliveredAt", "confirmedAt", "createdAt"] as const;
+const BLOCK_DATE_KEYS = ["startDate", "endDate", "lucaDeliveryAt", "matteoDeliveryAt", "createdAt"] as const;
+
+function reviveDate(v: unknown): unknown {
+  return typeof v === "string" ? new Date(v) : v;
+}
+
+function reviveContentDates<T>(rows: T[]): T[] {
+  for (const row of rows as Record<string, unknown>[]) {
+    for (const k of CONTENT_DATE_KEYS) row[k] = reviveDate(row[k]);
+    const block = row.block as Record<string, unknown> | null;
+    if (block) for (const k of BLOCK_DATE_KEYS) block[k] = reviveDate(block[k]);
+    const classes = row.classes as Record<string, unknown>[] | undefined;
+    if (classes) for (const c of classes) c.createdAt = reviveDate(c.createdAt);
+  }
+  return rows;
+}
+
 /** Cached per workspace + filters (tag `contents:${workspaceId}`, 30s safety
- *  revalidate). Invalidated explicitly via `revalidateTag` by every server
- *  action that mutates a Content (create/update/delete/move/status/etc.) —
- *  see src/lib/cache-tags.ts. */
+ *  revalidate). Invalidated explicitly via `updateTag` by every server action
+ *  that mutates a Content (create/update/delete/move/status/etc.) — see
+ *  src/lib/cache-tags.ts. Date fields are re-hydrated after the JSON cache
+ *  round-trip (see reviveContentDates). */
 export async function listContents(
   workspaceId: string,
   filters: ContentFilters = {}
@@ -26,7 +50,7 @@ export async function listContents(
     ["listContents", workspaceId, JSON.stringify(filters)],
     { tags: [contentsTag(workspaceId)], revalidate: 30 }
   );
-  return cached();
+  return reviveContentDates(await cached());
 }
 
 /** Most recently created content (for the home "Novità" feed). Same item shape
