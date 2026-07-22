@@ -20,7 +20,9 @@ import {
   setBlockDeliveryAction,
   createBlockRangeAction,
   resizeBlockAction,
+  updateEventNotesAction,
 } from "@/app/(app)/calendario/actions";
+import { updateContentFieldsAction } from "@/app/(app)/contenuti/actions";
 import { FORMAT_ORDER, FORMAT_LABELS } from "@/lib/format";
 import { nextTitleForFormat } from "@/lib/content-title";
 
@@ -34,6 +36,8 @@ type ItemDTO = {
   owner: "Luca" | "Matteo" | null;
   channel: "INSTAGRAM" | "YOUTUBE" | null;
   href: string | null;
+  title?: string;
+  notes?: string | null;
 };
 type BandBlock = { id: string; label: string; start: string; end: string };
 
@@ -69,7 +73,7 @@ export function CalendarBoard({
   monthLabel,
   year,
   weeks,
-  items,
+  items: initialItems,
   blocks,
   defaultResponsible = null,
   contentTitles = [],
@@ -91,6 +95,16 @@ export function CalendarBoard({
   const [showBlock, setShowBlock] = useState(false);
   const [selected, setSelected] = useState<ItemDTO | null>(null);
   const [inlineDay, setInlineDay] = useState<string | null>(null);
+  // Local item state so the drawer's quick-edit (title/notes) can update the
+  // chip optimistically without a blocking `router.refresh()`. Resynced when
+  // the server-provided items change (navigation, revalidate) — adjusted
+  // during render rather than in an effect (avoids an extra render pass).
+  const [items, setItems] = useState(initialItems);
+  const [syncedItems, setSyncedItems] = useState(initialItems);
+  if (initialItems !== syncedItems) {
+    setSyncedItems(initialItems);
+    setItems(initialItems);
+  }
 
   const byDay = new Map<string, ItemDTO[]>();
   for (const it of items) {
@@ -120,6 +134,59 @@ export function CalendarBoard({
     await deleteItemAction(it.refType, it.refId);
     toast.success("Evento rimosso");
     router.refresh();
+  };
+
+  // Drawer quick-edit (title/notes): local, discreet save status — no toast
+  // per keystroke/blur, just a small "Salvato ✓" / "Errore, riprova" hint.
+  // Reset when a different item is selected (adjusted during render, not an effect).
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const selectedKey = selected ? `${selected.refType}:${selected.refId}` : null;
+  const [statusKey, setStatusKey] = useState<string | null>(selectedKey);
+  if (selectedKey !== statusKey) {
+    setStatusKey(selectedKey);
+    setStatus("idle");
+  }
+
+  const saveContentField = async (field: "title" | "notes", value: string) => {
+    if (!selected) return;
+    const { refId, refType } = selected;
+    const fd = new FormData();
+    fd.set("id", refId);
+    fd.set(field, value);
+    setStatus("saving");
+    const ok = await updateContentFieldsAction(fd);
+    if (ok) {
+      setSelected((s) => (s ? { ...s, [field]: value, label: field === "title" ? value : s.label } : s));
+      setItems((list) =>
+        list.map((i) =>
+          i.refId === refId && i.refType === refType
+            ? { ...i, [field]: value, label: field === "title" ? value : i.label }
+            : i
+        )
+      );
+      setStatus("saved");
+    } else {
+      setStatus("error");
+    }
+  };
+
+  const saveEventNotes = async (value: string) => {
+    if (!selected) return;
+    const { refId, refType } = selected;
+    const fd = new FormData();
+    fd.set("id", refId);
+    fd.set("notes", value);
+    setStatus("saving");
+    const ok = await updateEventNotesAction(fd);
+    if (ok) {
+      setSelected((s) => (s ? { ...s, notes: value } : s));
+      setItems((list) =>
+        list.map((i) => (i.refId === refId && i.refType === refType ? { ...i, notes: value } : i))
+      );
+      setStatus("saved");
+    } else {
+      setStatus("error");
+    }
   };
 
   const DOW = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
@@ -463,7 +530,20 @@ export function CalendarBoard({
                     </button>
                   </div>
 
-                  <h3 className="mt-3 font-heading text-xl text-ink">{cleanTitle(selected)}</h3>
+                  {selected.refType === "publication" ? (
+                    <input
+                      key={`title-${selected.refId}`}
+                      defaultValue={selected.title ?? cleanTitle(selected)}
+                      placeholder="Nome"
+                      onBlur={(e) => saveContentField("title", e.target.value.trim())}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+                      }}
+                      className={`mt-3 font-heading text-lg ${inputCls}`}
+                    />
+                  ) : (
+                    <h3 className="mt-3 font-heading text-xl text-ink">{cleanTitle(selected)}</h3>
+                  )}
 
                   <dl className="mt-4 space-y-3 text-sm">
                     <div>
@@ -483,7 +563,36 @@ export function CalendarBoard({
                         <dd className="mt-0.5 text-ink">{meta.who}</dd>
                       </div>
                     )}
+                    {(selected.refType === "publication" || selected.refType === "event") && (
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Note</dt>
+                        <dd className="mt-1">
+                          <textarea
+                            key={`notes-${selected.refId}`}
+                            defaultValue={selected.notes ?? ""}
+                            rows={3}
+                            placeholder="Aggiungi una nota…"
+                            onBlur={(e) =>
+                              selected.refType === "publication"
+                                ? saveContentField("notes", e.target.value)
+                                : saveEventNotes(e.target.value)
+                            }
+                            className={`w-full resize-none ${inputCls}`}
+                          />
+                        </dd>
+                      </div>
+                    )}
                   </dl>
+
+                  {status !== "idle" && (
+                    <p
+                      className={`mt-2 text-xs transition-opacity ${
+                        status === "error" ? "text-coral-ink" : "text-muted-foreground"
+                      }`}
+                    >
+                      {status === "saving" ? "Salvataggio…" : status === "saved" ? "Salvato ✓" : "Errore, riprova"}
+                    </p>
+                  )}
 
                   <div className="mt-auto flex gap-2 pt-5">
                     {selected.href && (

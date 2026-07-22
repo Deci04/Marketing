@@ -50,6 +50,8 @@ export default async function CalendarioPage({
     owner: it.owner,
     channel: it.channel as "INSTAGRAM" | "YOUTUBE" | null,
     href: it.href,
+    title: it.title,
+    notes: it.notes,
   }));
 
   const bandDtos = blocks.map((b) => ({

@@ -548,12 +548,14 @@ export async function updateContentAction(formData: FormData) {
 }
 
 /** Quick inline-edit: partial patch (title and/or notes) built from whichever
- *  fields are present in the FormData — used by the calendar's quick-edit UI. */
-export async function updateContentFieldsAction(formData: FormData): Promise<void> {
+ *  fields are present in the FormData — used by the calendar's quick-edit UI.
+ *  Returns whether the save actually happened — the drawer's autosave UI needs
+ *  a truthful result, not an optimistic "Salvato" when a silent `!ctx` bail
+ *  happened. */
+export async function updateContentFieldsAction(formData: FormData): Promise<boolean> {
   const ctx = await currentContext();
-  if (!ctx) return;
   const id = String(formData.get("id") ?? "");
-  if (!id) return;
+  if (!ctx || !id) return false;
   const patch = buildContentPatch(formData);
   if (Object.keys(patch).length) {
     await updateContent(ctx.workspaceId, id, patch);
@@ -561,6 +563,7 @@ export async function updateContentFieldsAction(formData: FormData): Promise<voi
   revalidatePath("/contenuti");
   revalidatePath(`/contenuti/${id}`);
   revalidatePath("/calendario");
+  return true;
 }
 
 // --- Content class CRUD + assignment ---

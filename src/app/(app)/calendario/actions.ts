@@ -62,15 +62,17 @@ export async function addEventAction(formData: FormData) {
   revalidatePath("/calendario");
 }
 
-/** Quick inline-edit: set (or clear) a calendar event's notes. */
-export async function updateEventNotesAction(formData: FormData) {
+/** Quick inline-edit: set (or clear) a calendar event's notes. Returns whether
+ *  the save actually happened — the drawer's autosave UI needs a truthful
+ *  result, not an optimistic "Salvato" when a silent `!ctx` bail happened. */
+export async function updateEventNotesAction(formData: FormData): Promise<boolean> {
   const ctx = await currentContext();
-  if (!ctx) return;
   const id = String(formData.get("id") ?? "").trim();
-  if (!id) return;
+  if (!ctx || !id) return false;
   const notes = String(formData.get("notes") ?? "").trim() || null;
   await updateEventNotes(ctx.workspaceId, id, notes);
   revalidatePath("/calendario");
+  return true;
 }
 
 /** Quick inline-edit: set (or clear) a block's notes. */

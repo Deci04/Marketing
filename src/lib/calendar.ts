@@ -106,6 +106,8 @@ export type BoardItem = {
   owner: "Luca" | "Matteo" | null;
   channel: Channel | null;
   href: string | null;
+  title?: string;
+  notes?: string | null;
 };
 
 /** All draggable items in a month: block delivery deadlines, content
@@ -143,7 +145,7 @@ export async function getMonthItems(
   });
   for (const c of contents) {
     if (c.publishAt) {
-      items.push({ refType: "publication", refId: c.id, date: c.publishAt, label: c.title, owner: "Matteo", channel: c.channel, href: `/contenuti/${c.id}` });
+      items.push({ refType: "publication", refId: c.id, date: c.publishAt, label: c.title, owner: "Matteo", channel: c.channel, href: `/contenuti/${c.id}`, title: c.title, notes: c.notes });
     }
   }
 
@@ -152,7 +154,7 @@ export async function getMonthItems(
   });
   for (const e of events) {
     const owner = e.responsible === "LUCA" ? "Luca" : e.responsible === "MATTEO" ? "Matteo" : null;
-    items.push({ refType: "event", refId: e.id, date: e.date, label: e.title, owner, channel: null, href: null });
+    items.push({ refType: "event", refId: e.id, date: e.date, label: e.title, owner, channel: null, href: null, notes: e.notes });
   }
 
   return items;
