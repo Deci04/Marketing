@@ -315,6 +315,7 @@ export type CalendarBlock = {
   label: string;
   start: Date;
   end: Date;
+  notes: string | null;
 };
 
 /** Blocks overlapping the month, with their span (earliest → latest of their
@@ -350,7 +351,7 @@ export async function getMonthBlocks(
     }
     if (!s || !e) continue;
     if (e >= start && s < end) {
-      result.push({ id: b.id, label: b.label, start: s, end: e });
+      result.push({ id: b.id, label: b.label, start: s, end: e, notes: b.notes });
     }
   }
   return result;

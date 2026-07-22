@@ -13,7 +13,7 @@ import {
   updateBlockNotes,
   type BoardItemRef,
 } from "@/lib/calendar";
-import { createContent, listContents } from "@/lib/content";
+import { createContent, listContents, setBlockContents } from "@/lib/content";
 import { createActivity } from "@/lib/activity";
 import { parseFormat, FORMAT_LABELS } from "@/lib/format";
 import { nextTitleForFormat, nextNumericTitle } from "@/lib/content-title";
@@ -127,6 +127,18 @@ export async function setBlockDeliveryAction(formData: FormData) {
   if (!blockId || !ymd || (who !== "luca" && who !== "matteo")) return;
   await setBlockDelivery(ctx.workspaceId, blockId, who, toUtc(ymd));
   revalidatePath("/calendario");
+}
+
+/** Re-associate a block's contents from the block-edit dialog's checklist. */
+export async function setBlockContentsAction(formData: FormData): Promise<void> {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const blockId = String(formData.get("blockId") ?? "");
+  if (!blockId) return;
+  const contentIds = formData.getAll("contentIds").map(String).filter(Boolean);
+  await setBlockContents(ctx.workspaceId, blockId, contentIds);
+  revalidatePath("/calendario");
+  revalidatePath("/contenuti");
 }
 
 export async function createBlockRangeAction(formData: FormData) {

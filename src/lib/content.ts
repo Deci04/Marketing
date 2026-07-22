@@ -567,3 +567,59 @@ export async function setContentMasterLink(
     data: { masterLink: link },
   });
 }
+
+/** Pure diff between a block's current contents and the user's selection.
+ * toAttach = selected not in current; toDetach = current not in selected. */
+export function blockContentsDiff(
+  current: string[],
+  selected: string[]
+): { toAttach: string[]; toDetach: string[] } {
+  const currentSet = new Set(current);
+  const selectedSet = new Set(selected);
+  return {
+    toAttach: selected.filter((id) => !currentSet.has(id)),
+    toDetach: current.filter((id) => !selectedSet.has(id)),
+  };
+}
+
+/** Re-associate contents to a block from a user-picked selection: attaches
+ * newly-selected contents, detaches previously-attached ones the user removed.
+ * Everything is scoped to the workspace. */
+export async function setBlockContents(
+  workspaceId: string,
+  blockId: string,
+  selectedContentIds: string[]
+): Promise<void> {
+  const block = await db.block.findFirst({
+    where: scopedWhere(workspaceId, { id: blockId }),
+    select: { id: true },
+  });
+  if (!block) return;
+
+  const current = await db.content.findMany({
+    where: scopedWhere(workspaceId, { blockId }),
+    select: { id: true },
+  });
+  const currentIds = current.map((c) => c.id);
+
+  const scopedSelected = await db.content.findMany({
+    where: scopedWhere(workspaceId, { id: { in: selectedContentIds } }),
+    select: { id: true },
+  });
+  const scopedSelectedIds = scopedSelected.map((c) => c.id);
+
+  const { toAttach, toDetach } = blockContentsDiff(currentIds, scopedSelectedIds);
+
+  if (toAttach.length > 0) {
+    await db.content.updateMany({
+      where: scopedWhere(workspaceId, { id: { in: toAttach } }),
+      data: { blockId },
+    });
+  }
+  if (toDetach.length > 0) {
+    await db.content.updateMany({
+      where: scopedWhere(workspaceId, { id: { in: toDetach } }),
+      data: { blockId: null },
+    });
+  }
+}

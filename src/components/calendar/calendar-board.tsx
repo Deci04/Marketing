@@ -21,6 +21,8 @@ import {
   createBlockRangeAction,
   resizeBlockAction,
   updateEventNotesAction,
+  updateBlockNotesAction,
+  setBlockContentsAction,
 } from "@/app/(app)/calendario/actions";
 import { updateContentFieldsAction } from "@/app/(app)/contenuti/actions";
 import { FORMAT_ORDER, FORMAT_LABELS } from "@/lib/format";
@@ -39,7 +41,8 @@ type ItemDTO = {
   title?: string;
   notes?: string | null;
 };
-type BandBlock = { id: string; label: string; start: string; end: string };
+type BandBlock = { id: string; label: string; start: string; end: string; notes: string | null };
+type ContentDTO = { id: string; title: string; publishAt: string | null; blockId: string | null };
 
 function chipTone(it: ItemDTO) {
   if (it.refType === "luca") return "bg-blush text-blush-ink";
@@ -75,6 +78,7 @@ export function CalendarBoard({
   weeks,
   items: initialItems,
   blocks,
+  contents = [],
   defaultResponsible = null,
   contentTitles = [],
   prevHref,
@@ -85,6 +89,7 @@ export function CalendarBoard({
   weeks: Cell[][];
   items: ItemDTO[];
   blocks: BandBlock[];
+  contents?: ContentDTO[];
   defaultResponsible?: "LUCA" | "MATTEO" | null;
   contentTitles?: string[];
   prevHref: string;
@@ -95,6 +100,46 @@ export function CalendarBoard({
   const [showBlock, setShowBlock] = useState(false);
   const [selected, setSelected] = useState<ItemDTO | null>(null);
   const [inlineDay, setInlineDay] = useState<string | null>(null);
+  const [editBlock, setEditBlock] = useState<{ id: string; label: string; start: string; end: string } | null>(null);
+  // Checklist of contents falling in the block's period, default-checked; the
+  // user can deselect. Recomputed (during render, not an effect) whenever a
+  // different block dialog opens — `checkedForBlock` tracks which block the
+  // current `checkedIds` snapshot belongs to.
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [checkedForBlock, setCheckedForBlock] = useState<string | null>(null);
+  const blockContents = editBlock
+    ? contents.filter(
+        (c) =>
+          (c.publishAt !== null && c.publishAt >= editBlock.start && c.publishAt <= editBlock.end) ||
+          c.blockId === editBlock.id
+      )
+    : [];
+  if (editBlock && checkedForBlock !== editBlock.id) {
+    setCheckedForBlock(editBlock.id);
+    setCheckedIds(new Set(blockContents.map((c) => c.id)));
+  }
+  const closeEditBlock = () => {
+    setEditBlock(null);
+    setCheckedForBlock(null);
+  };
+  const toggleContentChecked = (id: string) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const saveBlockContents = async () => {
+    if (!editBlock) return;
+    const fd = new FormData();
+    fd.set("blockId", editBlock.id);
+    for (const id of checkedIds) fd.append("contentIds", id);
+    await setBlockContentsAction(fd);
+    toast.success("Blocco aggiornato");
+    closeEditBlock();
+    router.refresh();
+  };
   // Local item state so the drawer's quick-edit (title/notes) can update the
   // chip optimistically without a blocking `router.refresh()`. Resynced when
   // the server-provided items change (navigation, revalidate) — adjusted
@@ -323,11 +368,16 @@ export function CalendarBoard({
                     <div
                       key={seg.id}
                       style={{ gridColumn: `${seg.startCol + 1} / ${seg.endCol + 2}` }}
-                      className="relative truncate rounded-md border border-border bg-secondary px-3 py-0.5 text-[11px] font-medium text-ink/70"
+                      onClick={() => {
+                        const band = blocks.find((b) => b.id === seg.id);
+                        if (band) setEditBlock({ id: band.id, label: band.label, start: band.start, end: band.end });
+                      }}
+                      className="relative cursor-pointer truncate rounded-md border border-border bg-secondary px-3 py-0.5 text-[11px] font-medium text-ink/70 hover:bg-secondary/70"
                     >
                       {seg.startsHere && (
                         <span
                           draggable
+                          onClick={(e) => e.stopPropagation()}
                           onDragStart={(e) => {
                             e.stopPropagation();
                             e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "resize", id: seg.id, edge: "start" }));
@@ -342,6 +392,7 @@ export function CalendarBoard({
                       {seg.endsHere && (
                         <span
                           draggable
+                          onClick={(e) => e.stopPropagation()}
                           onDragStart={(e) => {
                             e.stopPropagation();
                             e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "resize", id: seg.id, edge: "end" }));
@@ -491,6 +542,74 @@ export function CalendarBoard({
           </form>
         </Dialog>
       )}
+
+      {editBlock &&
+        (() => {
+          const bandNotes = blocks.find((b) => b.id === editBlock.id)?.notes ?? null;
+          return (
+            <Dialog onClose={closeEditBlock} title={`Blocco · ${editBlock.label}`}>
+              <div className="space-y-4">
+                <Field label="Note per Luca">
+                  <textarea
+                    key={`block-notes-${editBlock.id}`}
+                    defaultValue={bandNotes ?? ""}
+                    rows={3}
+                    placeholder="Cosa consegnare a Luca…"
+                    onBlur={async (e) => {
+                      const fd = new FormData();
+                      fd.set("id", editBlock.id);
+                      fd.set("notes", e.target.value);
+                      await updateBlockNotesAction(fd);
+                    }}
+                    className={`w-full resize-none ${inputCls}`}
+                  />
+                </Field>
+
+                <div>
+                  <span className="mb-1.5 block text-xs text-muted-foreground">
+                    Contenuti nel periodo
+                  </span>
+                  {blockContents.length === 0 ? (
+                    <p className="text-xs text-muted-foreground/70">Nessun contenuto in questo periodo.</p>
+                  ) : (
+                    <ul className="max-h-64 space-y-1 overflow-y-auto">
+                      {blockContents.map((c) => (
+                        <li key={c.id}>
+                          <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-secondary/70">
+                            <input
+                              type="checkbox"
+                              checked={checkedIds.has(c.id)}
+                              onChange={() => toggleContentChecked(c.id)}
+                              className="h-4 w-4 shrink-0 rounded border-border"
+                            />
+                            <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={saveBlockContents}
+                    className="rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
+                  >
+                    Salva
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeEditBlock}
+                    className="rounded-full border border-border px-4 py-2.5 text-sm text-muted-foreground hover:bg-secondary"
+                  >
+                    Annulla
+                  </button>
+                </div>
+              </div>
+            </Dialog>
+          );
+        })()}
 
       <AnimatePresence>
         {selected &&
