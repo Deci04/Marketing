@@ -4,17 +4,29 @@ import { filtersToWhere, type ContentFilters } from "@/lib/classes";
 import { coverUrl } from "@/lib/materials";
 import { effectiveStatus } from "@/lib/status";
 import { syncItemOut, deleteItemOut } from "@/lib/google-calendar";
+import { unstable_cache } from "next/cache";
+import { contentsTag } from "@/lib/cache-tags";
 import type { Channel, ContentFormat } from "@prisma/client";
 
+/** Cached per workspace + filters (tag `contents:${workspaceId}`, 30s safety
+ *  revalidate). Invalidated explicitly via `revalidateTag` by every server
+ *  action that mutates a Content (create/update/delete/move/status/etc.) —
+ *  see src/lib/cache-tags.ts. */
 export async function listContents(
   workspaceId: string,
   filters: ContentFilters = {}
 ) {
-  return db.content.findMany({
-    where: filtersToWhere(workspaceId, filters),
-    include: { block: true, classes: true, _count: { select: { materials: true } } },
-    orderBy: [{ publishAt: "asc" }, { createdAt: "desc" }],
-  });
+  const cached = unstable_cache(
+    async () =>
+      db.content.findMany({
+        where: filtersToWhere(workspaceId, filters),
+        include: { block: true, classes: true, _count: { select: { materials: true } } },
+        orderBy: [{ publishAt: "asc" }, { createdAt: "desc" }],
+      }),
+    ["listContents", workspaceId, JSON.stringify(filters)],
+    { tags: [contentsTag(workspaceId)], revalidate: 30 }
+  );
+  return cached();
 }
 
 /** Most recently created content (for the home "Novità" feed). Same item shape
