@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { currentContext } from "@/lib/current";
 import {
   moveItem,
@@ -14,6 +14,7 @@ import {
   type BoardItemRef,
 } from "@/lib/calendar";
 import { createContent, listContents, setBlockContents } from "@/lib/content";
+import { contentsTag } from "@/lib/cache-tags";
 import { createActivity } from "@/lib/activity";
 import { parseFormat, FORMAT_LABELS } from "@/lib/format";
 import { nextTitleForFormat, nextNumericTitle } from "@/lib/content-title";
@@ -29,6 +30,8 @@ export async function moveItemAction(
   const ctx = await currentContext();
   if (!ctx || !refType || !refId || !ymd) return;
   await moveItem(ctx.workspaceId, refType, refId, toUtc(ymd));
+  // moveItem may mutate Content.publishAt (refType "publication").
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/calendario");
 }
 
@@ -39,6 +42,8 @@ export async function deleteItemAction(refType: BoardItemRef, refId: string): Pr
   const ctx = await currentContext();
   if (!ctx || !refType || !refId) return false;
   await deleteItem(ctx.workspaceId, refType, refId);
+  // deleteItem may mutate Content.publishAt (refType "publication").
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/calendario");
   return true;
 }
@@ -51,6 +56,8 @@ export async function resizeBlockAction(
   const ctx = await currentContext();
   if (!ctx || !id || !ymd) return;
   await resizeBlock(ctx.workspaceId, id, edge, toUtc(ymd));
+  // resizeBlock auto-attaches contents in the new range (Content.blockId).
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/calendario");
   revalidatePath("/contenuti");
 }
@@ -120,6 +127,7 @@ export async function addContentAction(formData: FormData): Promise<{ ok: boolea
     contentId: created.id,
     actorId: ctx.user.id,
   });
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/calendario");
   revalidatePath("/contenuti");
   revalidatePath("/home");
@@ -135,6 +143,8 @@ export async function setBlockDeliveryAction(formData: FormData) {
   const ymd = String(formData.get("date") ?? "").trim();
   if (!blockId || !ymd || (who !== "luca" && who !== "matteo")) return;
   await setBlockDelivery(ctx.workspaceId, blockId, who, toUtc(ymd));
+  // Delivery date changes the derived status of every content in the block.
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/calendario");
 }
 
@@ -147,6 +157,7 @@ export async function setBlockContentsAction(formData: FormData): Promise<boolea
   if (!ctx || !blockId) return false;
   const contentIds = formData.getAll("contentIds").map(String).filter(Boolean);
   await setBlockContents(ctx.workspaceId, blockId, contentIds);
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/calendario");
   revalidatePath("/contenuti");
   return true;
@@ -168,6 +179,8 @@ export async function createBlockRangeAction(formData: FormData) {
     lucaDeliveryAt: luca ? toUtc(luca) : null,
     matteoDeliveryAt: matteo ? toUtc(matteo) : null,
   });
+  // createBlockRange auto-attaches contents whose publishAt falls in the range.
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/calendario");
   revalidatePath("/contenuti");
 }

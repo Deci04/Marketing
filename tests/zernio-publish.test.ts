@@ -19,7 +19,7 @@ vi.mock("@/lib/current", () => ({
   currentUser: vi.fn(),
 }));
 vi.mock("@vercel/blob", () => ({ put: vi.fn(), del: vi.fn() }));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), updateTag: vi.fn() }));
 // L'archiviazione su Drive non è esercitata da queste suite (nessuna credenziale
 // Drive nel test env): la mockiamo per poter esercitare separatamente il path
 // "archivio riuscito → Blob cancellato" e il path "archivio non riuscito → Blob conservato".

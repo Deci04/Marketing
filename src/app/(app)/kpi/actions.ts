@@ -1,10 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { currentContext, currentUser } from "@/lib/current";
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
 import { updateContent } from "@/lib/content";
+import { contentsTag } from "@/lib/cache-tags";
 import {
   fetchAnalytics,
   ingestAnalytics,
@@ -53,6 +54,7 @@ export async function updatePerformanceAction(formData: FormData) {
     shares: num(formData.get("shares")),
     followsGenerated: num(formData.get("followsGenerated")),
   });
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/contenuti");
   revalidatePath(`/contenuti/${id}`);
   revalidatePath("/kpi");
@@ -360,6 +362,9 @@ export async function refreshKpiAction(): Promise<{
       return { ok: false, error: `Zernio: ${(e as Error).message}` };
     }
   }
+  // ingestAnalytics matches posts by externalId and writes performance fields
+  // (views/reach/likes/…) straight onto Content — invalidate the list cache too.
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/kpi");
   return { ok: true, summary: total };
 }

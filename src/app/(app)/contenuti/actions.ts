@@ -1,11 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { put, del } from "@vercel/blob";
 import { currentContext } from "@/lib/current";
 import { db } from "@/lib/db";
 import { scopedWhere } from "@/lib/workspace";
+import { contentsTag } from "@/lib/cache-tags";
 import { publish, isConfigured } from "@/lib/zernio";
 import {
   createBlock,
@@ -72,6 +73,7 @@ export async function createContentAction(formData: FormData) {
     contentId: created.id,
     actorId: ctx.user.id,
   });
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/contenuti");
   revalidatePath("/home");
 }
@@ -91,6 +93,7 @@ export async function markDeliveredAction(formData: FormData) {
     contentId,
     actorId: ctx.user.id,
   });
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
   revalidatePath("/home");
@@ -121,6 +124,7 @@ export async function markBlockDeliveredAction(formData: FormData) {
     await setDelivered(ctx.workspaceId, r.id);
     await createActivity(ctx.workspaceId, { type: "DELIVERED", contentId: r.id, actorId: ctx.user.id });
   }
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/home");
   revalidatePath("/contenuti");
 }
@@ -137,6 +141,7 @@ export async function confirmContentAction(formData: FormData) {
     contentId,
     actorId: ctx.user.id,
   });
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
   revalidatePath("/home");
@@ -206,6 +211,7 @@ export async function publishContentAction(
         publishError: "Manca l'originale a piena qualità",
       },
     });
+    updateTag(contentsTag(ctx.workspaceId));
     revalidatePath(`/contenuti/${content.id}`);
     revalidatePath("/contenuti");
     return {
@@ -254,6 +260,7 @@ export async function publishContentAction(
       where: { id: content.id },
       data: { publishState: "failed", publishError: result.error },
     });
+    updateTag(contentsTag(ctx.workspaceId));
     revalidatePath(`/contenuti/${content.id}`);
     revalidatePath("/contenuti");
     return { ok: false, error: result.error };
@@ -307,6 +314,7 @@ export async function publishContentAction(
     await del(uploadedOriginalUrl).catch(() => {});
   }
 
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath(`/contenuti/${content.id}`);
   revalidatePath("/contenuti");
   revalidatePath("/archivio");
@@ -323,6 +331,7 @@ export async function setContentStatusAction(formData: FormData) {
   const raw = String(formData.get("status") ?? "").trim();
   const status = raw && isDerivedStatus(raw) ? raw : null;
   await setContentStatus(ctx.workspaceId, contentId, status);
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/contenuti");
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/archivio");
@@ -427,6 +436,7 @@ export async function setVideoProxyAction(formData: FormData) {
       actorId: ctx.user.id,
     });
   }
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
   revalidatePath("/home");
@@ -454,6 +464,7 @@ export async function addMaterialAction(
       actorId: ctx.user.id,
     });
   }
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
   revalidatePath("/home");
@@ -493,6 +504,7 @@ export async function removeMaterialAction(materialId: string, contentId: string
   const ctx = await currentContext();
   if (!ctx) throw new Error("Non autorizzato");
   await removeMaterial(ctx.workspaceId, materialId);
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
 }
@@ -507,6 +519,7 @@ export async function reorderMaterialsAction(formData: FormData) {
     .filter(Boolean);
   if (!contentId || ids.length === 0) return;
   await reorderMaterials(ctx.workspaceId, contentId, ids);
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
 }
@@ -519,6 +532,7 @@ export async function setMasterLinkAction(formData: FormData) {
   if (!contentId) return;
   const link = String(formData.get("masterLink") ?? "").trim() || null;
   await setContentMasterLink(ctx.workspaceId, contentId, link);
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
 }
@@ -543,6 +557,7 @@ export async function updateContentAction(formData: FormData) {
     const classIds = formData.getAll("classIds").map(String).filter(Boolean);
     await setContentClasses(ctx.workspaceId, id, classIds);
   }
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/contenuti");
   revalidatePath(`/contenuti/${id}`);
 }
@@ -559,6 +574,7 @@ export async function updateContentFieldsAction(formData: FormData): Promise<boo
   const patch = buildContentPatch(formData);
   if (Object.keys(patch).length) {
     await updateContent(ctx.workspaceId, id, patch);
+    updateTag(contentsTag(ctx.workspaceId));
   }
   revalidatePath("/contenuti");
   revalidatePath(`/contenuti/${id}`);
@@ -610,6 +626,7 @@ export async function setContentClassesAction(formData: FormData) {
   if (!contentId) return;
   const classIds = formData.getAll("classIds").map(String).filter(Boolean);
   await setContentClasses(ctx.workspaceId, contentId, classIds);
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/contenuti");
   revalidatePath(`/contenuti/${contentId}`);
 }
@@ -620,6 +637,7 @@ export async function deleteContentAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await deleteContent(ctx.workspaceId, id);
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/contenuti");
   redirect("/contenuti");
 }
@@ -650,6 +668,7 @@ export async function setThumbnailAction(formData: FormData) {
   if (!finalUrl) return;
 
   await setContentThumbnail(ctx.workspaceId, contentId, finalUrl);
+  updateTag(contentsTag(ctx.workspaceId));
   revalidatePath(`/contenuti/${contentId}`);
   revalidatePath("/contenuti");
 }
