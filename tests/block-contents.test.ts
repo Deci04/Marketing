@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { blockContentsDiff, blockCandidateContents } from "@/lib/content";
+import { blockContentsDiff } from "@/lib/content";
+import { blockCandidateContents } from "@/lib/block-select";
 
 describe("blockContentsDiff", () => {
   it("attacca i nuovi, stacca i rimossi", () => {

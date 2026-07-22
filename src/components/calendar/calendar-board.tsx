@@ -25,7 +25,7 @@ import {
   setBlockContentsAction,
 } from "@/app/(app)/calendario/actions";
 import { updateContentFieldsAction } from "@/app/(app)/contenuti/actions";
-import { blockCandidateContents } from "@/lib/content";
+import { blockCandidateContents } from "@/lib/block-select";
 import { FORMAT_ORDER, FORMAT_LABELS } from "@/lib/format";
 import { nextTitleForFormat } from "@/lib/content-title";
 

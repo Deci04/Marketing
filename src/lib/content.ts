@@ -570,25 +570,6 @@ export async function setContentMasterLink(
   });
 }
 
-/** Candidati mostrabili nella checklist "Contenuti nel periodo" del dialog di
- *  un blocco: contenuti con `publishAt` nel range del blocco che sono liberi
- *  (blockId null) o già di QUESTO blocco. Esclude i contenuti già assegnati
- *  a un ALTRO blocco — altrimenti salvare li ruberebbe (vedi setBlockContents). */
-export function blockCandidateContents(
-  contents: { id: string; title: string; publishAt: string | null; blockId: string | null }[],
-  block: { id: string; start: string; end: string }
-): { id: string; title: string; alreadyInBlock: boolean }[] {
-  return contents
-    .filter(
-      (c) =>
-        c.publishAt != null &&
-        c.publishAt >= block.start &&
-        c.publishAt <= block.end &&
-        (c.blockId == null || c.blockId === block.id)
-    )
-    .map((c) => ({ id: c.id, title: c.title, alreadyInBlock: c.blockId === block.id }));
-}
-
 /** Pure diff between a block's current contents and the user's selection.
  * toAttach = selected not in current; toDetach = current not in selected. */
 export function blockContentsDiff(
