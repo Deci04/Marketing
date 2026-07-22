@@ -9,8 +9,6 @@ import {
 } from "@/components/diary/diary-conversation";
 import { DiaryOrganize } from "@/components/diary/diary-organize";
 
-export const dynamic = "force-dynamic";
-
 export default async function DiarioPage() {
   const ctx = await currentContext();
   if (!ctx) redirect("/login");
