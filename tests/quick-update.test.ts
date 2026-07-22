@@ -23,4 +23,7 @@ describe("buildContentPatch", () => {
   it("nessun campo → {}", () => {
     expect(buildContentPatch(fd({ id: "x" }))).toEqual({});
   });
+  it("title vuoto → non incluso (non cancella il nome)", () => {
+    expect(buildContentPatch(fd({ title: "   " }))).toEqual({});
+  });
 });

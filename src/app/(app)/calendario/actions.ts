@@ -75,15 +75,17 @@ export async function updateEventNotesAction(formData: FormData): Promise<boolea
   return true;
 }
 
-/** Quick inline-edit: set (or clear) a block's notes. */
-export async function updateBlockNotesAction(formData: FormData) {
+/** Quick inline-edit: set (or clear) a block's notes. Returns whether the
+ *  save actually happened, like its `updateEventNotesAction`/`setBlockContentsAction`
+ *  siblings. */
+export async function updateBlockNotesAction(formData: FormData): Promise<boolean> {
   const ctx = await currentContext();
-  if (!ctx) return;
   const id = String(formData.get("id") ?? "").trim();
-  if (!id) return;
+  if (!ctx || !id) return false;
   const notes = String(formData.get("notes") ?? "").trim() || null;
   await updateBlockNotes(ctx.workspaceId, id, notes);
   revalidatePath("/calendario");
+  return true;
 }
 
 /** Quick-create a content directly from the calendar: publishAt = clicked day.
@@ -129,16 +131,18 @@ export async function setBlockDeliveryAction(formData: FormData) {
   revalidatePath("/calendario");
 }
 
-/** Re-associate a block's contents from the block-edit dialog's checklist. */
-export async function setBlockContentsAction(formData: FormData): Promise<void> {
+/** Re-associate a block's contents from the block-edit dialog's checklist.
+ *  Returns whether the save actually happened — the dialog needs a truthful
+ *  result, not an optimistic "Salvato" when a silent `!ctx`/missing-id bail happened. */
+export async function setBlockContentsAction(formData: FormData): Promise<boolean> {
   const ctx = await currentContext();
-  if (!ctx) return;
   const blockId = String(formData.get("blockId") ?? "");
-  if (!blockId) return;
+  if (!ctx || !blockId) return false;
   const contentIds = formData.getAll("contentIds").map(String).filter(Boolean);
   await setBlockContents(ctx.workspaceId, blockId, contentIds);
   revalidatePath("/calendario");
   revalidatePath("/contenuti");
+  return true;
 }
 
 export async function createBlockRangeAction(formData: FormData) {

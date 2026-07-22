@@ -300,14 +300,16 @@ export function toArchiveRows(contents: RowSource[]): ArchiveRowData[] {
 
 /** Build a partial update patch from FormData, including only the keys that
  *  are actually present (fd.has(key)) — used by quick inline-edit actions.
- *  title: trimmed if present (an empty string stays an empty string — not
- *  cleared here). notes: trimmed if present; an empty string clears it (null). */
+ *  title: trimmed if present, but included only when non-empty — a content
+ *  must have a name, so an empty/whitespace title is dropped rather than
+ *  clearing the name. notes: trimmed if present; an empty string clears it (null). */
 export function buildContentPatch(
   fd: FormData
 ): { title?: string; notes?: string | null } {
   const patch: { title?: string; notes?: string | null } = {};
   if (fd.has("title")) {
-    patch.title = String(fd.get("title") ?? "").trim();
+    const title = String(fd.get("title") ?? "").trim();
+    if (title) patch.title = title;
   }
   if (fd.has("notes")) {
     const notes = String(fd.get("notes") ?? "").trim();
@@ -566,6 +568,25 @@ export async function setContentMasterLink(
     where: { id: contentId },
     data: { masterLink: link },
   });
+}
+
+/** Candidati mostrabili nella checklist "Contenuti nel periodo" del dialog di
+ *  un blocco: contenuti con `publishAt` nel range del blocco che sono liberi
+ *  (blockId null) o già di QUESTO blocco. Esclude i contenuti già assegnati
+ *  a un ALTRO blocco — altrimenti salvare li ruberebbe (vedi setBlockContents). */
+export function blockCandidateContents(
+  contents: { id: string; title: string; publishAt: string | null; blockId: string | null }[],
+  block: { id: string; start: string; end: string }
+): { id: string; title: string; alreadyInBlock: boolean }[] {
+  return contents
+    .filter(
+      (c) =>
+        c.publishAt != null &&
+        c.publishAt >= block.start &&
+        c.publishAt <= block.end &&
+        (c.blockId == null || c.blockId === block.id)
+    )
+    .map((c) => ({ id: c.id, title: c.title, alreadyInBlock: c.blockId === block.id }));
 }
 
 /** Pure diff between a block's current contents and the user's selection.

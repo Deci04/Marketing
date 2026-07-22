@@ -25,6 +25,7 @@ import {
   setBlockContentsAction,
 } from "@/app/(app)/calendario/actions";
 import { updateContentFieldsAction } from "@/app/(app)/contenuti/actions";
+import { blockCandidateContents } from "@/lib/content";
 import { FORMAT_ORDER, FORMAT_LABELS } from "@/lib/format";
 import { nextTitleForFormat } from "@/lib/content-title";
 
@@ -77,7 +78,7 @@ export function CalendarBoard({
   year,
   weeks,
   items: initialItems,
-  blocks,
+  blocks: initialBlocks,
   contents = [],
   defaultResponsible = null,
   contentTitles = [],
@@ -107,13 +108,7 @@ export function CalendarBoard({
   // current `checkedIds` snapshot belongs to.
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [checkedForBlock, setCheckedForBlock] = useState<string | null>(null);
-  const blockContents = editBlock
-    ? contents.filter(
-        (c) =>
-          (c.publishAt !== null && c.publishAt >= editBlock.start && c.publishAt <= editBlock.end) ||
-          c.blockId === editBlock.id
-      )
-    : [];
+  const blockContents = editBlock ? blockCandidateContents(contents, editBlock) : [];
   if (editBlock && checkedForBlock !== editBlock.id) {
     setCheckedForBlock(editBlock.id);
     setCheckedIds(new Set(blockContents.map((c) => c.id)));
@@ -135,10 +130,14 @@ export function CalendarBoard({
     const fd = new FormData();
     fd.set("blockId", editBlock.id);
     for (const id of checkedIds) fd.append("contentIds", id);
-    await setBlockContentsAction(fd);
-    toast.success("Blocco aggiornato");
-    closeEditBlock();
-    router.refresh();
+    const ok = await setBlockContentsAction(fd);
+    if (ok) {
+      toast.success("Blocco aggiornato");
+      closeEditBlock();
+      router.refresh();
+    } else {
+      toast.error("Non salvato, riprova");
+    }
   };
   // Local item state so the drawer's quick-edit (title/notes) can update the
   // chip optimistically without a blocking `router.refresh()`. Resynced when
@@ -149,6 +148,17 @@ export function CalendarBoard({
   if (initialItems !== syncedItems) {
     setSyncedItems(initialItems);
     setItems(initialItems);
+  }
+
+  // Local block state so the block-notes onBlur save can update the note
+  // in place (reopening the same block in the same session shouldn't show a
+  // stale value). Resynced when the server-provided blocks change, same
+  // pattern as `items`/`syncedItems` above.
+  const [blocks, setBlocks] = useState(initialBlocks);
+  const [syncedBlocks, setSyncedBlocks] = useState(initialBlocks);
+  if (initialBlocks !== syncedBlocks) {
+    setSyncedBlocks(initialBlocks);
+    setBlocks(initialBlocks);
   }
 
   const byDay = new Map<string, ItemDTO[]>();
@@ -556,10 +566,17 @@ export function CalendarBoard({
                     rows={3}
                     placeholder="Cosa consegnare a Luca…"
                     onBlur={async (e) => {
+                      const blockId = editBlock.id;
                       const fd = new FormData();
-                      fd.set("id", editBlock.id);
+                      fd.set("id", blockId);
                       fd.set("notes", e.target.value);
-                      await updateBlockNotesAction(fd);
+                      const ok = await updateBlockNotesAction(fd);
+                      if (ok) {
+                        const notes = e.target.value.trim() || null;
+                        setBlocks((prev) =>
+                          prev.map((b) => (b.id === blockId ? { ...b, notes } : b))
+                        );
+                      }
                     }}
                     className={`w-full resize-none ${inputCls}`}
                   />

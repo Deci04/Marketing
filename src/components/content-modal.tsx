@@ -50,7 +50,6 @@ export type ModalContent = {
   channel: "INSTAGRAM" | "YOUTUBE";
   status: string;
   statusOverride: string | null;
-  hook: string | null;
   notes: string | null;
   publishAt: string | null;
   publishAtInput: string | null;
