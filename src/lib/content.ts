@@ -304,6 +304,7 @@ export async function updateContent(
   data: {
     title?: string;
     hook?: string | null;
+    notes?: string | null;
     publishAt?: Date | null;
     format?: ContentFormat | null;
     // performance metrics (filled after publishing)
