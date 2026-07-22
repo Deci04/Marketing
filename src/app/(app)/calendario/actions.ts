@@ -32,11 +32,15 @@ export async function moveItemAction(
   revalidatePath("/calendario");
 }
 
-export async function deleteItemAction(refType: BoardItemRef, refId: string) {
+/** Deletes a calendar item. Returns whether the delete actually happened —
+ *  the board's optimistic removal needs a truthful result to know whether
+ *  to roll back. */
+export async function deleteItemAction(refType: BoardItemRef, refId: string): Promise<boolean> {
   const ctx = await currentContext();
-  if (!ctx || !refType || !refId) return;
+  if (!ctx || !refType || !refId) return false;
   await deleteItem(ctx.workspaceId, refType, refId);
   revalidatePath("/calendario");
+  return true;
 }
 
 export async function resizeBlockAction(
@@ -89,12 +93,14 @@ export async function updateBlockNotesAction(formData: FormData): Promise<boolea
 }
 
 /** Quick-create a content directly from the calendar: publishAt = clicked day.
- *  Title optional → auto-named by type ("Reel 1", "Reel 2", …). */
-export async function addContentAction(formData: FormData) {
+ *  Title optional → auto-named by type ("Reel 1", "Reel 2", …). Returns
+ *  whether the create actually happened — the board's optimistic add needs
+ *  a truthful result before showing the placeholder item. */
+export async function addContentAction(formData: FormData): Promise<{ ok: boolean }> {
   const ctx = await currentContext();
-  if (!ctx) return;
+  if (!ctx) return { ok: false };
   const ymd = String(formData.get("date") ?? "").trim();
-  if (!ymd) return;
+  if (!ymd) return { ok: false };
   const channel = (String(formData.get("channel") ?? "INSTAGRAM") as Channel);
   const format = parseFormat(String(formData.get("format") ?? ""));
   let title = String(formData.get("title") ?? "").trim();
@@ -117,6 +123,7 @@ export async function addContentAction(formData: FormData) {
   revalidatePath("/calendario");
   revalidatePath("/contenuti");
   revalidatePath("/home");
+  return { ok: true };
 }
 
 /** Set a block's Luca/Matteo delivery deadline to a given day (quick action). */

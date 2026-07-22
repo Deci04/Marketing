@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
@@ -58,6 +58,12 @@ function cleanTitle(it: ItemDTO) {
   if (it.refType === "luca" || it.refType === "matteo")
     return it.label.replace(/^(Luca|Matteo) · /, "");
   return it.label;
+}
+
+function deleteToastLabel(it: ItemDTO) {
+  if (it.refType === "publication") return "Contenuto rimosso dal calendario";
+  if (it.refType === "luca" || it.refType === "matteo") return "Scadenza rimossa";
+  return "Evento rimosso";
 }
 
 function kindMeta(it: ItemDTO) {
@@ -149,6 +155,9 @@ export function CalendarBoard({
     setSyncedItems(initialItems);
     setItems(initialItems);
   }
+  // Stable, non-colliding suffix for optimistic item ids (quick-create) —
+  // avoids Math.random()/Date.now() for React keys.
+  const optimisticIdRef = useRef(0);
 
   // Local block state so the block-notes onBlur save can update the note
   // in place (reopening the same block in the same session shouldn't show a
@@ -185,10 +194,20 @@ export function CalendarBoard({
     } catch {}
   };
 
+  // Delete feels instant: remove the item from local state right away and
+  // only fall back to a rollback (re-inserting it) if the server call fails.
+  // No `router.refresh()` on success — the revalidate from the action already
+  // covers the next navigation, and local state is already correct.
   const onDelete = async (it: ItemDTO) => {
-    await deleteItemAction(it.refType, it.refId);
-    toast.success("Evento rimosso");
-    router.refresh();
+    setItems((list) => list.filter((i) => !(i.refId === it.refId && i.refType === it.refType)));
+    setSelected((s) => (s && s.refId === it.refId && s.refType === it.refType ? null : s));
+    const ok = await deleteItemAction(it.refType, it.refId);
+    if (ok) {
+      toast.success(deleteToastLabel(it));
+    } else {
+      setItems((list) => [...list, it]);
+      toast.error("Non eliminato, riprova");
+    }
   };
 
   // Drawer quick-edit (title/notes): local, discreet save status — no toast
@@ -508,7 +527,24 @@ export function CalendarBoard({
           blockId={blocks.find((b) => inlineDay >= b.start && inlineDay <= b.end)?.id ?? null}
           blockLabel={blocks.find((b) => inlineDay >= b.start && inlineDay <= b.end)?.label ?? null}
           onClose={() => setInlineDay(null)}
-          onCreated={() => {
+          onCreated={(optimistic) => {
+            if (optimistic) {
+              optimisticIdRef.current += 1;
+              setItems((list) => [
+                ...list,
+                {
+                  refType: "publication",
+                  refId: `optimistic-${optimisticIdRef.current}`,
+                  ymd: optimistic.ymd,
+                  label: optimistic.title,
+                  title: optimistic.title,
+                  notes: null,
+                  owner: "Matteo",
+                  channel: optimistic.channel,
+                  href: null,
+                },
+              ]);
+            }
             setInlineDay(null);
             router.refresh();
           }}
@@ -836,7 +872,7 @@ function QuickCreate({
   blockId: string | null;
   blockLabel: string | null;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (optimistic?: { ymd: string; title: string; channel: "INSTAGRAM" | "YOUTUBE" | null }) => void;
 }) {
   const [mode, setMode] = useState<QuickMode>("content");
   const [format, setFormat] = useState<string>("REEL");
@@ -879,12 +915,18 @@ function QuickCreate({
     if (mode === "content") {
       setBusy(true);
       remember();
-      fd.set("title", shown.trim());
+      const finalTitle = shown.trim();
+      fd.set("title", finalTitle);
       fd.set("channel", channel);
       if (format) fd.set("format", format);
-      await addContentAction(fd);
-      toast.success("Contenuto creato");
-      onCreated();
+      const { ok } = await addContentAction(fd);
+      if (ok) {
+        toast.success("Contenuto creato");
+        onCreated({ ymd: day, title: finalTitle, channel });
+      } else {
+        setBusy(false);
+        toast.error("Non creato, riprova");
+      }
     } else {
       const t = (touched ? title : "").trim();
       if (!t) return; // an event needs a title
