@@ -27,6 +27,10 @@ const nextConfig: NextConfig = {
     staleTimes: {
       dynamic: 25,
     },
+    // Il barrel @phosphor-icons/react importato nei client component spedisce
+    // troppo JS al telefono (hydration lenta → Link non idratati che ricadono in
+    // navigazione full-page). optimizePackageImports lo tree-shaka per-icona.
+    optimizePackageImports: ["@phosphor-icons/react"],
   },
 };
 
