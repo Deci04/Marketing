@@ -16,6 +16,7 @@ import {
   setContentVideoProxy,
   setContentMasterLink,
   updateContent,
+  buildContentPatch,
   deleteContent,
   deleteComment,
   addMaterial,
@@ -528,12 +529,12 @@ export async function updateContentAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   const title = String(formData.get("title") ?? "").trim();
-  const hook = String(formData.get("hook") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
   const publishRaw = String(formData.get("publishAt") ?? "").trim();
   const format = parseFormat(String(formData.get("format") ?? ""));
   await updateContent(ctx.workspaceId, id, {
     ...(title ? { title } : {}),
-    hook: hook || null,
+    notes: notes || null,
     publishAt: publishRaw ? new Date(publishRaw) : null,
     format,
   });
@@ -544,6 +545,22 @@ export async function updateContentAction(formData: FormData) {
   }
   revalidatePath("/contenuti");
   revalidatePath(`/contenuti/${id}`);
+}
+
+/** Quick inline-edit: partial patch (title and/or notes) built from whichever
+ *  fields are present in the FormData — used by the calendar's quick-edit UI. */
+export async function updateContentFieldsAction(formData: FormData): Promise<void> {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  const patch = buildContentPatch(formData);
+  if (Object.keys(patch).length) {
+    await updateContent(ctx.workspaceId, id, patch);
+  }
+  revalidatePath("/contenuti");
+  revalidatePath(`/contenuti/${id}`);
+  revalidatePath("/calendario");
 }
 
 // --- Content class CRUD + assignment ---

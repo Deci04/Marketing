@@ -237,6 +237,31 @@ export async function deleteItem(
   return db.calendarEvent.delete({ where: { id: refId } });
 }
 
+/** Set (or clear) a custom calendar event's notes. */
+export async function updateEventNotes(
+  workspaceId: string,
+  id: string,
+  notes: string | null
+) {
+  const e = await db.calendarEvent.findFirst({
+    where: scopedWhere(workspaceId, { id }),
+    select: { id: true },
+  });
+  if (!e) return null;
+  return db.calendarEvent.update({ where: { id }, data: { notes } });
+}
+
+/** Set (or clear) a block's notes. */
+export async function updateBlockNotes(
+  workspaceId: string,
+  id: string,
+  notes: string | null
+) {
+  const b = await scopedBlock(workspaceId, id);
+  if (!b) return null;
+  return db.block.update({ where: { id }, data: { notes } });
+}
+
 export async function addEvent(
   workspaceId: string,
   data: { date: Date; title: string; responsible?: string | null }

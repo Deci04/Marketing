@@ -298,6 +298,24 @@ export function toArchiveRows(contents: RowSource[]): ArchiveRowData[] {
   });
 }
 
+/** Build a partial update patch from FormData, including only the keys that
+ *  are actually present (fd.has(key)) — used by quick inline-edit actions.
+ *  title: trimmed if present (an empty string stays an empty string — not
+ *  cleared here). notes: trimmed if present; an empty string clears it (null). */
+export function buildContentPatch(
+  fd: FormData
+): { title?: string; notes?: string | null } {
+  const patch: { title?: string; notes?: string | null } = {};
+  if (fd.has("title")) {
+    patch.title = String(fd.get("title") ?? "").trim();
+  }
+  if (fd.has("notes")) {
+    const notes = String(fd.get("notes") ?? "").trim();
+    patch.notes = notes || null;
+  }
+  return patch;
+}
+
 export async function updateContent(
   workspaceId: string,
   id: string,

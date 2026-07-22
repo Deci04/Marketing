@@ -9,6 +9,8 @@ import {
   createBlockRange,
   resizeBlock,
   setBlockDelivery,
+  updateEventNotes,
+  updateBlockNotes,
   type BoardItemRef,
 } from "@/lib/calendar";
 import { createContent, listContents } from "@/lib/content";
@@ -57,6 +59,28 @@ export async function addEventAction(formData: FormData) {
   const responsible = String(formData.get("responsible") ?? "").trim() || null;
   if (!title || !ymd) return;
   await addEvent(ctx.workspaceId, { date: toUtc(ymd), title, responsible });
+  revalidatePath("/calendario");
+}
+
+/** Quick inline-edit: set (or clear) a calendar event's notes. */
+export async function updateEventNotesAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return;
+  const notes = String(formData.get("notes") ?? "").trim() || null;
+  await updateEventNotes(ctx.workspaceId, id, notes);
+  revalidatePath("/calendario");
+}
+
+/** Quick inline-edit: set (or clear) a block's notes. */
+export async function updateBlockNotesAction(formData: FormData) {
+  const ctx = await currentContext();
+  if (!ctx) return;
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return;
+  const notes = String(formData.get("notes") ?? "").trim() || null;
+  await updateBlockNotes(ctx.workspaceId, id, notes);
   revalidatePath("/calendario");
 }
 
