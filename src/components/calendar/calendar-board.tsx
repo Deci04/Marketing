@@ -125,6 +125,21 @@ export function CalendarBoard({
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [checkedForBlock, setCheckedForBlock] = useState<string | null>(null);
   const [confirmDeleteBlock, setConfirmDeleteBlock] = useState(false);
+  // Drag-to-select a day range on the grid (pointer events, independent from
+  // the HTML5 drag&drop used for moving chips/resizing blocks below): a
+  // pointerdown on a cell marks the start, pointerenter over other cells while
+  // the button is held extends the range, pointerup on the grid opens the
+  // "new block" dialog pre-filled with the selected range.
+  const [dragStartYmd, setDragStartYmd] = useState<string | null>(null);
+  const [dragEndYmd, setDragEndYmd] = useState<string | null>(null);
+  const [isRangeDragging, setIsRangeDragging] = useState(false);
+  const didRangeDragRef = useRef(false);
+  const [blockRange, setBlockRange] = useState<{ start: string; end: string } | null>(null);
+  const inDragRange = (ymd: string) => {
+    if (!dragStartYmd || !dragEndYmd) return false;
+    const [lo, hi] = dragStartYmd <= dragEndYmd ? [dragStartYmd, dragEndYmd] : [dragEndYmd, dragStartYmd];
+    return ymd >= lo && ymd <= hi;
+  };
   const blockContents = editBlock ? blockCandidateContents(contents, editBlock) : [];
   if (editBlock && checkedForBlock !== editBlock.id) {
     setCheckedForBlock(editBlock.id);
@@ -395,7 +410,25 @@ export function CalendarBoard({
           })}
       </div>
 
-      <div className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block">
+      <div
+        className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block"
+        onPointerUp={() => {
+          if (isRangeDragging && dragStartYmd && dragEndYmd && dragStartYmd !== dragEndYmd) {
+            const [start, end] =
+              dragStartYmd <= dragEndYmd ? [dragStartYmd, dragEndYmd] : [dragEndYmd, dragStartYmd];
+            setBlockRange({ start, end });
+            setShowBlock(true);
+          }
+          setDragStartYmd(null);
+          setDragEndYmd(null);
+          setIsRangeDragging(false);
+        }}
+        onPointerLeave={() => {
+          setDragStartYmd(null);
+          setDragEndYmd(null);
+          setIsRangeDragging(false);
+        }}
+      >
         <div className="grid grid-cols-7 border-b border-border">
           {DOW.map((d) => (
             <div key={d} className="px-2 py-2 text-center text-xs text-muted-foreground">{d}</div>
@@ -438,6 +471,7 @@ export function CalendarBoard({
                         <span
                           draggable
                           onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
                           onDragStart={(e) => {
                             e.stopPropagation();
                             e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "resize", id: seg.id, edge: "start" }));
@@ -453,6 +487,7 @@ export function CalendarBoard({
                         <span
                           draggable
                           onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
                           onDragStart={(e) => {
                             e.stopPropagation();
                             e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "resize", id: seg.id, edge: "end" }));
@@ -480,10 +515,36 @@ export function CalendarBoard({
                       }}
                       onDragLeave={() => setDragOver((d) => (d === cell.ymd ? null : d))}
                       onDrop={(e) => onDrop(cell.ymd, e)}
-                      onClick={() => setInlineDay(cell.ymd)}
+                      onPointerDown={() => {
+                        setDragStartYmd(cell.ymd);
+                        setDragEndYmd(cell.ymd);
+                        setIsRangeDragging(false);
+                        didRangeDragRef.current = false;
+                      }}
+                      onPointerEnter={(e) => {
+                        if (e.buttons === 1 && dragStartYmd) {
+                          setDragEndYmd(cell.ymd);
+                          if (cell.ymd !== dragStartYmd) {
+                            setIsRangeDragging(true);
+                            didRangeDragRef.current = true;
+                          }
+                        }
+                      }}
+                      onClick={() => {
+                        if (didRangeDragRef.current) {
+                          didRangeDragRef.current = false;
+                          return;
+                        }
+                        setInlineDay(cell.ymd);
+                      }}
+                      style={{ touchAction: "pan-y" }}
                       className={`group/cell relative min-h-24 cursor-pointer p-1.5 ${lastCol ? "" : "border-r"} border-border ${
                         cell.inMonth ? "" : "bg-cream/50"
-                      } ${dragOver === cell.ymd ? "bg-lavender/30 ring-1 ring-inset ring-lavender-ink/30" : ""}`}
+                      } ${
+                        dragOver === cell.ymd || inDragRange(cell.ymd)
+                          ? "bg-lavender/30 ring-1 ring-inset ring-lavender-ink/30"
+                          : ""
+                      }`}
                     >
                       <div className="mb-1 flex items-center justify-between">
                         <span
@@ -521,6 +582,7 @@ export function CalendarBoard({
                                 e.stopPropagation();
                                 setSelected(it);
                               }}
+                              onPointerDown={(e) => e.stopPropagation()}
                               className={`group/chip flex cursor-grab items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium active:cursor-grabbing ${chipTone(it)}`}
                               title={it.label}
                             >
@@ -583,12 +645,20 @@ export function CalendarBoard({
       )}
 
       {showBlock && (
-        <Dialog onClose={() => setShowBlock(false)} title="Nuovo blocco settimanale">
+        <Dialog
+          onClose={() => {
+            setShowBlock(false);
+            setBlockRange(null);
+          }}
+          title="Nuovo blocco settimanale"
+        >
           <form
+            key={blockRange ? `${blockRange.start}-${blockRange.end}` : "new"}
             action={async (fd) => {
               await createBlockRangeAction(fd);
               toast.success("Blocco creato — contenuti del periodo inclusi");
               setShowBlock(false);
+              setBlockRange(null);
               router.refresh();
             }}
             className="space-y-3"
@@ -598,10 +668,22 @@ export function CalendarBoard({
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Dal">
-                <input type="date" name="startDate" required className={inputCls} />
+                <input
+                  type="date"
+                  name="startDate"
+                  required
+                  defaultValue={blockRange?.start ?? ""}
+                  className={inputCls}
+                />
               </Field>
               <Field label="Al">
-                <input type="date" name="endDate" required className={inputCls} />
+                <input
+                  type="date"
+                  name="endDate"
+                  required
+                  defaultValue={blockRange?.end ?? ""}
+                  className={inputCls}
+                />
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -615,7 +697,13 @@ export function CalendarBoard({
             <p className="text-xs text-muted-foreground">
               I contenuti con pubblicazione nel periodo verranno inclusi automaticamente.
             </p>
-            <DialogActions onCancel={() => setShowBlock(false)} submitLabel="Crea blocco" />
+            <DialogActions
+              onCancel={() => {
+                setShowBlock(false);
+                setBlockRange(null);
+              }}
+              submitLabel="Crea blocco"
+            />
           </form>
         </Dialog>
       )}
@@ -945,7 +1033,7 @@ const fmtDayLabel = (ymd: string) => {
   });
 };
 
-type QuickMode = "content" | "event" | "delivery";
+type QuickMode = "content" | "event" | "delivery" | "block";
 
 /** Fast creator shown as a centered card: pick Contenuto (type pre-selected,
  *  name auto by type, remembers last settings), Evento (title + responsabile),
@@ -976,6 +1064,10 @@ function QuickCreate({
   const [title, setTitle] = useState("");
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [blockLabelInput, setBlockLabelInput] = useState("");
+  const [blockEnd, setBlockEnd] = useState("");
+  const [blockLuca, setBlockLuca] = useState("");
+  const [blockMatteo, setBlockMatteo] = useState("");
 
   // Remember last-used settings so the next creation starts where you left off.
   useEffect(() => {
@@ -1005,6 +1097,20 @@ function QuickCreate({
     if (busy || mode === "delivery") return;
     const fd = new FormData();
     fd.set("date", day);
+    if (mode === "block") {
+      if (!blockLabelInput.trim() || !blockEnd) return; // servono etichetta e fine
+      setBusy(true);
+      const bfd = new FormData();
+      bfd.set("label", blockLabelInput.trim());
+      bfd.set("startDate", day);
+      bfd.set("endDate", blockEnd);
+      if (blockLuca) bfd.set("lucaDeliveryAt", blockLuca);
+      if (blockMatteo) bfd.set("matteoDeliveryAt", blockMatteo);
+      await createBlockRangeAction(bfd);
+      toast.success("Blocco creato");
+      onCreated();
+      return;
+    }
     if (mode === "content") {
       setBusy(true);
       remember();
@@ -1045,10 +1151,13 @@ function QuickCreate({
     onCreated();
   };
 
-  const tabs: QuickMode[] = blockId ? ["content", "event", "delivery"] : ["content", "event"];
+  const tabs: QuickMode[] = blockId
+    ? ["content", "event", "block", "delivery"]
+    : ["content", "event", "block"];
   const tabLabel: Record<QuickMode, string> = {
     content: "Contenuto",
     event: "Evento",
+    block: "Blocco",
     delivery: "Consegna",
   };
 
@@ -1120,6 +1229,53 @@ function QuickCreate({
                 Consegna Matteo
               </button>
             </div>
+          </div>
+        ) : mode === "block" ? (
+          <div className="space-y-3">
+            <input
+              autoFocus
+              value={blockLabelInput}
+              onChange={(e) => setBlockLabelInput(e.target.value)}
+              placeholder='Es. "Settimana 30"'
+              className="w-full rounded-xl border border-border bg-paper px-3.5 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/40"
+            />
+            <p className="text-xs text-muted-foreground">
+              Inizio: <span className="font-medium text-ink capitalize">{fmtDayLabel(day)}</span>
+            </p>
+            <Field label="Fine">
+              <input
+                type="date"
+                value={blockEnd}
+                onChange={(e) => setBlockEnd(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Consegna Luca (opz.)">
+                <input
+                  type="date"
+                  value={blockLuca}
+                  onChange={(e) => setBlockLuca(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Consegna Matteo (opz.)">
+                <input
+                  type="date"
+                  value={blockMatteo}
+                  onChange={(e) => setBlockMatteo(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={busy}
+              className="w-full rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            >
+              Crea blocco
+            </button>
           </div>
         ) : (
           <div className="space-y-3">
