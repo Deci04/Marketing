@@ -9,6 +9,7 @@ import {
   CaretRight,
   Plus,
   X,
+  Trash,
   InstagramLogo,
   YoutubeLogo,
 } from "@phosphor-icons/react";
@@ -18,6 +19,7 @@ import {
   addEventAction,
   addContentAction,
   setBlockDeliveryAction,
+  deleteBlockAction,
   createBlockRangeAction,
   resizeBlockAction,
   updateEventNotesAction,
@@ -42,7 +44,15 @@ type ItemDTO = {
   title?: string;
   notes?: string | null;
 };
-type BandBlock = { id: string; label: string; start: string; end: string; notes: string | null };
+type BandBlock = {
+  id: string;
+  label: string;
+  start: string;
+  end: string;
+  notes: string | null;
+  lucaDeliveryAt: string | null;
+  matteoDeliveryAt: string | null;
+};
 type ContentDTO = { id: string; title: string; publishAt: string | null; blockId: string | null };
 
 function chipTone(it: ItemDTO) {
@@ -114,14 +124,35 @@ export function CalendarBoard({
   // current `checkedIds` snapshot belongs to.
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [checkedForBlock, setCheckedForBlock] = useState<string | null>(null);
+  const [confirmDeleteBlock, setConfirmDeleteBlock] = useState(false);
   const blockContents = editBlock ? blockCandidateContents(contents, editBlock) : [];
   if (editBlock && checkedForBlock !== editBlock.id) {
     setCheckedForBlock(editBlock.id);
     setCheckedIds(new Set(blockContents.map((c) => c.id)));
+    setConfirmDeleteBlock(false);
   }
   const closeEditBlock = () => {
     setEditBlock(null);
     setCheckedForBlock(null);
+    setConfirmDeleteBlock(false);
+  };
+  const saveDelivery = async (who: "luca" | "matteo", value: string) => {
+    if (!editBlock) return;
+    const blockId = editBlock.id;
+    const fd = new FormData();
+    fd.set("blockId", blockId);
+    fd.set("who", who);
+    fd.set("date", value); // vuoto = azzera (gestito dall'azione)
+    await setBlockDeliveryAction(fd);
+    const ymd = value || null;
+    setBlocks((prev) =>
+      prev.map((b) =>
+        b.id === blockId
+          ? { ...b, [who === "luca" ? "lucaDeliveryAt" : "matteoDeliveryAt"]: ymd }
+          : b
+      )
+    );
+    toast.success("Consegna aggiornata");
   };
   const toggleContentChecked = (id: string) => {
     setCheckedIds((prev) => {
@@ -591,7 +622,8 @@ export function CalendarBoard({
 
       {editBlock &&
         (() => {
-          const bandNotes = blocks.find((b) => b.id === editBlock.id)?.notes ?? null;
+          const band = blocks.find((b) => b.id === editBlock.id);
+          const bandNotes = band?.notes ?? null;
           return (
             <Dialog onClose={closeEditBlock} title={`Blocco · ${editBlock.label}`}>
               <div className="space-y-4">
@@ -617,6 +649,27 @@ export function CalendarBoard({
                     className={`w-full resize-none ${inputCls}`}
                   />
                 </Field>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Consegna Luca">
+                    <input
+                      type="date"
+                      key={`luca-delivery-${editBlock.id}`}
+                      defaultValue={band?.lucaDeliveryAt ?? ""}
+                      onChange={(e) => saveDelivery("luca", e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label="Consegna Matteo">
+                    <input
+                      type="date"
+                      key={`matteo-delivery-${editBlock.id}`}
+                      defaultValue={band?.matteoDeliveryAt ?? ""}
+                      onChange={(e) => saveDelivery("matteo", e.target.value)}
+                      className={inputCls}
+                    />
+                  </Field>
+                </div>
 
                 <div>
                   <span className="mb-1.5 block text-xs text-muted-foreground">
@@ -659,6 +712,46 @@ export function CalendarBoard({
                     Annulla
                   </button>
                 </div>
+
+                {!confirmDeleteBlock ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteBlock(true)}
+                    className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-coral/60 bg-coral/30 px-3 py-1.5 text-xs text-coral-ink transition-colors hover:bg-coral/50"
+                  >
+                    <Trash size={14} /> Elimina blocco
+                  </button>
+                ) : (
+                  <div className="mt-1 flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Eliminare il blocco?</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const blockId = editBlock.id;
+                        const fd = new FormData();
+                        fd.set("id", blockId);
+                        const ok = await deleteBlockAction(fd);
+                        if (ok) {
+                          setBlocks((prev) => prev.filter((b) => b.id !== blockId));
+                          closeEditBlock();
+                          toast.success("Blocco eliminato");
+                        } else {
+                          toast.error("Non eliminato, riprova");
+                        }
+                      }}
+                      className="rounded-full bg-coral/80 px-3 py-1.5 font-medium text-coral-ink hover:bg-coral"
+                    >
+                      Elimina
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteBlock(false)}
+                      className="rounded-full border border-border px-3 py-1.5 text-muted-foreground hover:bg-secondary"
+                    >
+                      Annulla
+                    </button>
+                  </div>
+                )}
               </div>
             </Dialog>
           );
