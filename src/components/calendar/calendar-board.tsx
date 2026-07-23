@@ -158,7 +158,11 @@ export function CalendarBoard({
     fd.set("blockId", blockId);
     fd.set("who", who);
     fd.set("date", value); // vuoto = azzera (gestito dall'azione)
-    await setBlockDeliveryAction(fd);
+    const ok = await setBlockDeliveryAction(fd);
+    if (!ok) {
+      toast.error("Non salvato, riprova");
+      return;
+    }
     const ymd = value || null;
     setBlocks((prev) =>
       prev.map((b) =>
@@ -428,6 +432,11 @@ export function CalendarBoard({
           setDragEndYmd(null);
           setIsRangeDragging(false);
         }}
+        onPointerCancel={() => {
+          setDragStartYmd(null);
+          setDragEndYmd(null);
+          setIsRangeDragging(false);
+        }}
       >
         <div className="grid grid-cols-7 border-b border-border">
           {DOW.map((d) => (
@@ -655,7 +664,11 @@ export function CalendarBoard({
           <form
             key={blockRange ? `${blockRange.start}-${blockRange.end}` : "new"}
             action={async (fd) => {
-              await createBlockRangeAction(fd);
+              const ok = await createBlockRangeAction(fd);
+              if (!ok) {
+                toast.error("Non creato, riprova");
+                return;
+              }
               toast.success("Blocco creato — contenuti del periodo inclusi");
               setShowBlock(false);
               setBlockRange(null);
@@ -1106,7 +1119,12 @@ function QuickCreate({
       bfd.set("endDate", blockEnd);
       if (blockLuca) bfd.set("lucaDeliveryAt", blockLuca);
       if (blockMatteo) bfd.set("matteoDeliveryAt", blockMatteo);
-      await createBlockRangeAction(bfd);
+      const ok = await createBlockRangeAction(bfd);
+      if (!ok) {
+        setBusy(false);
+        toast.error("Non creato, riprova");
+        return;
+      }
       toast.success("Blocco creato");
       onCreated();
       return;
@@ -1246,6 +1264,7 @@ function QuickCreate({
               <input
                 type="date"
                 value={blockEnd}
+                min={day}
                 onChange={(e) => setBlockEnd(e.target.value)}
                 className={inputCls}
               />

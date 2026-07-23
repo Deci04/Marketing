@@ -301,21 +301,26 @@ export async function createBlockRange(
     matteoDeliveryAt?: Date | null;
   }
 ) {
+  let startDate = data.startDate;
+  let endDate = data.endDate;
+  if (startDate > endDate) {
+    [startDate, endDate] = [endDate, startDate];
+  }
   const block = await db.block.create({
     data: {
       workspaceId,
       label: data.label,
-      startDate: data.startDate,
-      endDate: data.endDate,
-      lucaDeliveryAt: data.lucaDeliveryAt ?? data.startDate,
-      matteoDeliveryAt: data.matteoDeliveryAt ?? data.endDate,
+      startDate,
+      endDate,
+      lucaDeliveryAt: data.lucaDeliveryAt ?? startDate,
+      matteoDeliveryAt: data.matteoDeliveryAt ?? endDate,
     },
   });
   // auto-include contents whose publication falls in the range and aren't already in a block
   await db.content.updateMany({
     where: scopedWhere(workspaceId, {
       blockId: null,
-      publishAt: { gte: data.startDate, lte: data.endDate },
+      publishAt: { gte: startDate, lte: endDate },
     }),
     data: { blockId: block.id },
   });
