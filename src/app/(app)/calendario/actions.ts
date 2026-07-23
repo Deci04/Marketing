@@ -5,6 +5,7 @@ import { currentContext } from "@/lib/current";
 import {
   moveItem,
   deleteItem,
+  deleteBlock,
   addEvent,
   createBlockRange,
   resizeBlock,
@@ -134,18 +135,32 @@ export async function addContentAction(formData: FormData): Promise<{ ok: boolea
   return { ok: true };
 }
 
-/** Set a block's Luca/Matteo delivery deadline to a given day (quick action). */
+/** Set (or clear) a block's Luca/Matteo delivery deadline (quick action).
+ *  An empty date azzera la consegna. */
 export async function setBlockDeliveryAction(formData: FormData) {
   const ctx = await currentContext();
   if (!ctx) return;
   const blockId = String(formData.get("blockId") ?? "").trim();
   const who = String(formData.get("who") ?? "").trim();
   const ymd = String(formData.get("date") ?? "").trim();
-  if (!blockId || !ymd || (who !== "luca" && who !== "matteo")) return;
-  await setBlockDelivery(ctx.workspaceId, blockId, who, toUtc(ymd));
+  if (!blockId || (who !== "luca" && who !== "matteo")) return;
+  await setBlockDelivery(ctx.workspaceId, blockId, who, ymd ? toUtc(ymd) : null);
   // Delivery date changes the derived status of every content in the block.
   updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/calendario");
+}
+
+/** Delete a block outright. */
+export async function deleteBlockAction(formData: FormData): Promise<boolean> {
+  const ctx = await currentContext();
+  if (!ctx) return false;
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return false;
+  await deleteBlock(ctx.workspaceId, id);
+  updateTag(contentsTag(ctx.workspaceId));
+  revalidatePath("/calendario");
+  revalidatePath("/contenuti");
+  return true;
 }
 
 /** Re-associate a block's contents from the block-edit dialog's checklist.

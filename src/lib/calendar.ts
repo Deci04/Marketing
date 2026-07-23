@@ -164,21 +164,36 @@ async function scopedBlock(workspaceId: string, id: string) {
   return db.block.findFirst({ where: scopedWhere(workspaceId, { id }), select: { id: true } });
 }
 
-/** Set one of a block's delivery deadlines (Luca/Matteo) to a given day. */
+/** Set (or clear) one of a block's delivery deadlines (Luca/Matteo). A `null`
+ * date azzera la consegna. */
 export async function setBlockDelivery(
   workspaceId: string,
   blockId: string,
   who: "luca" | "matteo",
-  date: Date
+  date: Date | null
 ) {
   if (!(await scopedBlock(workspaceId, blockId))) return null;
   const updated = await db.block.update({
     where: { id: blockId },
     data: who === "luca" ? { lucaDeliveryAt: date } : { matteoDeliveryAt: date },
   });
-  // G: USCITA — push della delivery date (who è già "luca"|"matteo").
-  void syncItemOut(workspaceId, who, blockId).catch(() => {});
+  if (date != null) {
+    // G: USCITA — push della delivery date (who è già "luca"|"matteo").
+    void syncItemOut(workspaceId, who, blockId).catch(() => {});
+  } else {
+    // G: la data è azzerata → rimuovi l'evento Google della consegna.
+    void deleteItemOut(workspaceId, who, blockId).catch(() => {});
+  }
   return updated;
+}
+
+/** Delete a block outright (contents are detached via onDelete:SetNull,
+ * comments cascade). Best-effort cleanup of the block's Google events first. */
+export async function deleteBlock(workspaceId: string, id: string) {
+  if (!(await scopedBlock(workspaceId, id))) return null;
+  void deleteItemOut(workspaceId, "luca", id).catch(() => {});
+  void deleteItemOut(workspaceId, "matteo", id).catch(() => {});
+  return db.block.delete({ where: { id } });
 }
 
 export async function moveItem(
@@ -316,6 +331,8 @@ export type CalendarBlock = {
   start: Date;
   end: Date;
   notes: string | null;
+  lucaDeliveryAt: string | null;
+  matteoDeliveryAt: string | null;
 };
 
 /** Blocks overlapping the month, with their span (earliest → latest of their
@@ -327,6 +344,7 @@ export async function getMonthBlocks(
 ): Promise<CalendarBlock[]> {
   const start = new Date(Date.UTC(year, month, 1));
   const end = new Date(Date.UTC(year, month + 1, 1));
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
   const blocks = await db.block.findMany({
     where: scopedWhere(workspaceId),
@@ -351,7 +369,15 @@ export async function getMonthBlocks(
     }
     if (!s || !e) continue;
     if (e >= start && s < end) {
-      result.push({ id: b.id, label: b.label, start: s, end: e, notes: b.notes });
+      result.push({
+        id: b.id,
+        label: b.label,
+        start: s,
+        end: e,
+        notes: b.notes,
+        lucaDeliveryAt: b.lucaDeliveryAt ? ymd(b.lucaDeliveryAt) : null,
+        matteoDeliveryAt: b.matteoDeliveryAt ? ymd(b.matteoDeliveryAt) : null,
+      });
     }
   }
   return result;
