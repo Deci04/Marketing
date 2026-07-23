@@ -60,6 +60,8 @@ export default async function CalendarioPage({
     start: ymd(b.start),
     end: ymd(b.end),
     notes: b.notes ?? null,
+    lucaDeliveryAt: b.lucaDeliveryAt,
+    matteoDeliveryAt: b.matteoDeliveryAt,
   }));
 
   const prev = month === 0 ? { y: year - 1, m: 11 } : { y: year, m: month - 1 };

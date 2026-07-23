@@ -5,6 +5,7 @@ import { currentContext } from "@/lib/current";
 import {
   moveItem,
   deleteItem,
+  deleteBlock,
   addEvent,
   createBlockRange,
   resizeBlock,
@@ -134,18 +135,35 @@ export async function addContentAction(formData: FormData): Promise<{ ok: boolea
   return { ok: true };
 }
 
-/** Set a block's Luca/Matteo delivery deadline to a given day (quick action). */
-export async function setBlockDeliveryAction(formData: FormData) {
+/** Set (or clear) a block's Luca/Matteo delivery deadline (quick action).
+ *  An empty date azzera la consegna. Returns whether the save actually
+ *  happened — the caller needs a truthful result, not an optimistic
+ *  "Consegna aggiornata" when a silent `!ctx`/bad-params bail happened. */
+export async function setBlockDeliveryAction(formData: FormData): Promise<boolean> {
   const ctx = await currentContext();
-  if (!ctx) return;
+  if (!ctx) return false;
   const blockId = String(formData.get("blockId") ?? "").trim();
   const who = String(formData.get("who") ?? "").trim();
   const ymd = String(formData.get("date") ?? "").trim();
-  if (!blockId || !ymd || (who !== "luca" && who !== "matteo")) return;
-  await setBlockDelivery(ctx.workspaceId, blockId, who, toUtc(ymd));
+  if (!blockId || (who !== "luca" && who !== "matteo")) return false;
+  await setBlockDelivery(ctx.workspaceId, blockId, who, ymd ? toUtc(ymd) : null);
   // Delivery date changes the derived status of every content in the block.
   updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/calendario");
+  return true;
+}
+
+/** Delete a block outright. */
+export async function deleteBlockAction(formData: FormData): Promise<boolean> {
+  const ctx = await currentContext();
+  if (!ctx) return false;
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return false;
+  const deleted = await deleteBlock(ctx.workspaceId, id);
+  updateTag(contentsTag(ctx.workspaceId));
+  revalidatePath("/calendario");
+  revalidatePath("/contenuti");
+  return deleted != null;
 }
 
 /** Re-associate a block's contents from the block-edit dialog's checklist.
@@ -163,13 +181,17 @@ export async function setBlockContentsAction(formData: FormData): Promise<boolea
   return true;
 }
 
-export async function createBlockRangeAction(formData: FormData) {
+/** Create a block over a date range (quick-create + "Nuovo blocco" dialog).
+ *  Returns whether the create actually happened — callers need a truthful
+ *  result, not an optimistic "Blocco creato" when a silent `!ctx`/missing-field
+ *  bail happened. */
+export async function createBlockRangeAction(formData: FormData): Promise<boolean> {
   const ctx = await currentContext();
-  if (!ctx) return;
+  if (!ctx) return false;
   const label = String(formData.get("label") ?? "").trim();
   const start = String(formData.get("startDate") ?? "").trim();
   const end = String(formData.get("endDate") ?? "").trim();
-  if (!label || !start || !end) return;
+  if (!label || !start || !end) return false;
   const luca = String(formData.get("lucaDeliveryAt") ?? "").trim();
   const matteo = String(formData.get("matteoDeliveryAt") ?? "").trim();
   await createBlockRange(ctx.workspaceId, {
@@ -183,4 +205,5 @@ export async function createBlockRangeAction(formData: FormData) {
   updateTag(contentsTag(ctx.workspaceId));
   revalidatePath("/calendario");
   revalidatePath("/contenuti");
+  return true;
 }
